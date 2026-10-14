@@ -25,6 +25,9 @@
 # Claude Code binary kept next to the project, not part of the app
 /claude.exe
 
+# Landing page lives here on disk but is its own repo (github.com/artemjewpetya-lab/personal-crm-landing)
+/personal-crm-landing/
+
 # debug
 npm-debug.log*
 .pnpm-debug.log*

@@ -1,14 +1,20 @@
-import { ContactRoundIcon } from "lucide-react";
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
+import { Onest, Unbounded } from "next/font/google";
 import Link from "next/link";
 
+import { LogoMark } from "@/components/logo-mark";
 import { Toaster } from "@/components/ui/sonner";
 
 import "./globals.css";
 
-const geistSans = Geist({
+// Same typefaces as the landing: Onest for text, Unbounded for headings
+const onest = Onest({
   variable: "--font-sans",
+  subsets: ["latin", "cyrillic"],
+});
+
+const unbounded = Unbounded({
+  variable: "--font-heading",
   subsets: ["latin", "cyrillic"],
 });
 
@@ -22,15 +28,20 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="ru" className={`${geistSans.variable} h-full antialiased`}>
+    <html
+      lang="ru"
+      className={`${onest.variable} ${unbounded.variable} h-full antialiased`}
+    >
       <body className="flex min-h-full flex-col">
-        <header className="border-b">
-          <div className="mx-auto flex h-14 w-full max-w-5xl items-center px-4">
+        <header>
+          <div className="mx-auto flex h-16 w-full max-w-5xl items-center px-5 lg:h-20">
             <Link
               href="/"
-              className="flex items-center gap-2 font-semibold tracking-tight"
+              className="flex items-center gap-2.5 rounded-logo font-heading text-logo font-semibold lg:gap-3 lg:text-logo-lg"
             >
-              <ContactRoundIcon aria-hidden className="size-5" />
+              <span className="flex size-8.5 items-center justify-center rounded-logo bg-primary text-on-plum lg:size-10">
+                <LogoMark className="size-5 lg:size-5.5" />
+              </span>
               Личная CRM
             </Link>
           </div>

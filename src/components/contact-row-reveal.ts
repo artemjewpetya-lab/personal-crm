@@ -16,11 +16,10 @@ export function revealContactRow(contactId: string): void {
     const row = document.getElementById(contactRowId(contactId));
     if (row) {
       row.scrollIntoView({ block: "center", behavior: "smooth" });
+      // The color is a design token from globals.css
+      const highlight = getComputedStyle(row).getPropertyValue("--highlight");
       row.animate(
-        [
-          { backgroundColor: "oklch(0.95 0.08 95)" },
-          { backgroundColor: "transparent" },
-        ],
+        [{ backgroundColor: highlight }, { backgroundColor: "transparent" }],
         { duration: 2500, easing: "ease-out" },
       );
       return;

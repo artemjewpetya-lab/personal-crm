@@ -33,12 +33,15 @@ const Toaster = ({ ...props }: ToasterProps) => {
           "--normal-bg": "var(--popover)",
           "--normal-text": "var(--popover-foreground)",
           "--normal-border": "var(--border)",
-          "--border-radius": "var(--radius)",
+          "--border-radius": "var(--radius-tile)",
         } as React.CSSProperties
       }
       toastOptions={{
+        // Sonner brings its own font and a dark action button; "!" lets the app styles win
         classNames: {
-          toast: "cn-toast",
+          toast: "cn-toast font-sans!",
+          actionButton:
+            "h-8! rounded-lg! bg-primary! px-3! text-sm! font-semibold! text-primary-foreground!",
         },
       }}
       {...props}

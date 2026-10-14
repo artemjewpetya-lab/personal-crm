@@ -65,7 +65,15 @@ export function AddContactDialog() {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger render={<Button size="lg" />}>
+      {/* On phones a regular-size button, so it fits on one line with the heading */}
+      <DialogTrigger
+        render={
+          <Button
+            size="lg"
+            className="max-sm:h-10 max-sm:gap-2 max-sm:rounded-lg max-sm:px-3.5 max-sm:text-sm max-sm:[&_svg:not([class*='size-'])]:size-4"
+          />
+        }
+      >
         <PlusIcon data-icon="inline-start" />
         Добавить контакт
       </DialogTrigger>

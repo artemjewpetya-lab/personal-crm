@@ -63,12 +63,12 @@ export function ContactSearch() {
       {isPending ? (
         <LoaderCircleIcon
           aria-hidden
-          className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 animate-spin text-muted-foreground"
+          className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 animate-spin text-muted-foreground"
         />
       ) : (
         <SearchIcon
           aria-hidden
-          className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+          className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-muted-foreground"
         />
       )}
       <Input
@@ -84,7 +84,7 @@ export function ContactSearch() {
             clear();
           }
         }}
-        className="h-10 pr-10 pl-9 [&::-webkit-search-cancel-button]:hidden"
+        className="h-12 rounded-button pr-12 pl-11 [&::-webkit-search-cancel-button]:hidden"
       />
       {value && (
         <Button
@@ -93,7 +93,7 @@ export function ContactSearch() {
           size="icon-sm"
           aria-label="Очистить поиск"
           onClick={clear}
-          className="absolute top-1/2 right-1.5 -translate-y-1/2"
+          className="absolute top-1/2 right-2 -translate-y-1/2"
         >
           <XIcon />
         </Button>
@@ -107,14 +107,14 @@ export function ContactSearchFallback() {
     <div className="relative w-full">
       <SearchIcon
         aria-hidden
-        className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+        className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-muted-foreground"
       />
       <Input
         type="search"
         aria-label="Поиск контактов"
         placeholder={SEARCH_PLACEHOLDER}
         disabled
-        className="h-10 pl-9"
+        className="h-12 rounded-button pl-11"
       />
     </div>
   );

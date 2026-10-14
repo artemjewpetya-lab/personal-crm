@@ -57,7 +57,7 @@ export function EditContactDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger render={<Button variant="outline" />}>
+      <DialogTrigger render={<Button variant="secondary" />}>
         <PencilIcon data-icon="inline-start" />
         Изменить
       </DialogTrigger>

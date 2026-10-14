@@ -27,8 +27,17 @@ export function formatDateTime(date: Date): string {
   return dateTimeFormat.format(date);
 }
 
-export function formatDate(date: Date): string {
-  return dateFormat.format(date);
+/** 14 Oct 2026 -> { day: "14", rest: "октября 2026 г." }: the day is shown large, like on the landing */
+export function formatDateParts(date: Date): { day: string; rest: string } {
+  const parts = dateFormat.formatToParts(date);
+  return {
+    day: parts.find((part) => part.type === "day")?.value ?? "",
+    rest: parts
+      .filter((part) => part.type !== "day")
+      .map((part) => part.value)
+      .join("")
+      .trim(),
+  };
 }
 
 /** "+7 900 123-45-67" -> "tel:+79001234567" */

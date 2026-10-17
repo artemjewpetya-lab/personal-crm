@@ -1,0 +1,58 @@
+# Production stack on the server, docker compose project "prod".
+# Lives in /opt/personal-crm next to .env (owner deploy, mode 600) with
+# POSTGRES_USER, POSTGRES_PASSWORD and POSTGRES_DB - the same names as in the
+# root .env.example. DATABASE_URL is built from them below, so the password
+# must be URL-safe: generate it with `openssl rand -hex 32`.
+# Do not run it by hand: deploy.sh sets APP_TAG (the image tag = commit SHA).
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-app: &app
+  image: ghcr.io/artemjewpetya-lab/personal-crm:${APP_TAG:?APP_TAG is not set, run deploy.sh}
+  environment:
+    DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER is not set in .env}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set in .env}@db:5432/${POSTGRES_DB:?POSTGRES_DB is not set in .env}
+  depends_on:
+    db:
+      condition: service_healthy
+  logging: *logging
+
+services:
+  db:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is not set in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is not set in .env}
+    # No published ports: only the app reaches the database, over the compose network.
+    volumes:
+      # Postgres 18+ images keep data under /var/lib/postgresql/<major>/docker
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    logging: *logging
+
+  # One-off container from the app image: applies migrations and exits.
+  # The profile keeps it out of "up"; deploy.sh starts it with "run".
+  migrate:
+    <<: *app
+    command: ["node", "scripts/migrate.mts"]
+    restart: "no"
+    profiles: [migrate]
+
+  app:
+    <<: *app
+    restart: unless-stopped
+    ports:
+      # Loopback only: nginx on the host proxies app.personalcrm.site here.
+      - "127.0.0.1:3000:3000"
+
+volumes:
+  pgdata:

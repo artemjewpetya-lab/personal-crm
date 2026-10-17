@@ -1,0 +1,26 @@
+# Only what the image build needs goes into the build context.
+
+# Secrets must never get into an image
+.env
+.env*
+!.env.example
+
+# Installed and generated inside the image
+node_modules
+.next
+*.tsbuildinfo
+next-env.d.ts
+
+# Not needed to build the app
+.git
+.github
+.claude
+deploy
+e2e
+specs
+test-results
+playwright-report
+personal-crm-landing
+claude.exe
+compose.yaml
+*.md

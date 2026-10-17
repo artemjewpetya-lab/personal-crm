@@ -19,6 +19,8 @@ COPY patches ./patches
 RUN pnpm install --frozen-lockfile
 
 COPY . .
+# public/ is empty for now and git does not keep empty folders, so make sure it exists.
+RUN mkdir -p public
 # The database client reads DATABASE_URL when its module loads, and the build
 # loads every route. Nothing connects during the build, so a placeholder is enough.
 RUN DATABASE_URL=postgresql://build:build@build-placeholder:5432/build pnpm build

@@ -11,7 +11,7 @@
 # CI (deploy/ci-deploy.sh) sends a short-lived GHCR token on stdin for the pull.
 # Manual rollback: run this script with the previous tag; its image is kept on
 # the server, so no token is needed:
-#   bash /opt/personal-crm/deploy.sh "$(cat /opt/personal-crm/state/previous_tag)"
+#   sudo -u deploy bash /opt/personal-crm/deploy.sh "$(sudo cat /opt/personal-crm/state/previous_tag)"
 set -euo pipefail
 
 readonly IMAGE_REPO="ghcr.io/artemjewpetya-lab/personal-crm"
@@ -102,7 +102,7 @@ if [[ -z "$healthy" ]]; then
   compose logs --no-color --tail 50 app >&2 || true
   echo "---" >&2
   echo "Nothing was rolled back. To roll back by hand, run on the server:" >&2
-  echo "  bash $APP_DIR/deploy.sh ${current_tag:-<previous tag>}" >&2
+  echo "  sudo -u deploy bash $APP_DIR/deploy.sh ${current_tag:-<previous tag>}" >&2
   exit 1
 fi
 log "Smoke test passed: $body"

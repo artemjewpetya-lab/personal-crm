@@ -9,13 +9,16 @@ import {
   ContactSearch,
   ContactSearchFallback,
 } from "@/components/contact-search";
+import { KeepInTouchList, type KeepInTouchItem } from "@/components/keep-in-touch-list";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   countContacts,
   listContacts,
+  listDueContacts,
   type ContactListItem,
+  type DueContact,
 } from "@/lib/contacts/queries";
-import { pluralize } from "@/lib/format";
+import { formatDate, formatOverdue, pluralize } from "@/lib/format";
 
 const CONTACT_WORDS: [string, string, string] = ["контакт", "контакта", "контактов"];
 
@@ -43,11 +46,50 @@ async function ContactList({
 }: Pick<PageProps<"/">, "searchParams">) {
   const { q } = await searchParams;
   const search = typeof q === "string" ? q.trim() : "";
-  const [items, total] = await Promise.all([
+  // "Пора связаться" is hidden while searching, so it is not even read then.
+  const [items, total, due] = await Promise.all([
     listContacts(search),
     countContacts(),
+    search ? [] : listDueContacts(),
   ]);
 
+  return (
+    <>
+      {due.length > 0 && (
+        // The data is already here, so this boundary never shows a fallback. It lets
+        // React make the block clickable on its own, without waiting for the long
+        // contact list below it: a click on a not-yet-ready part of the page is
+        // otherwise lost.
+        <Suspense>
+          <KeepInTouchList items={due.map(toKeepInTouchItem)} />
+        </Suspense>
+      )}
+      <ContactListSection search={search} items={items} total={total} />
+    </>
+  );
+}
+
+function toKeepInTouchItem(contact: DueContact): KeepInTouchItem {
+  return {
+    id: contact.id,
+    name: contact.name,
+    overdue: formatOverdue(contact.overdueDays),
+    lastNote: contact.lastNoteAt
+      ? `(последняя заметка ${formatDate(contact.lastNoteAt)})`
+      : "(заметок нет)",
+    snippet: contact.lastNoteSnippet || null,
+  };
+}
+
+function ContactListSection({
+  search,
+  items,
+  total,
+}: {
+  search: string;
+  items: ContactListItem[];
+  total: number;
+}) {
   return (
     <section aria-label="Список контактов" className="flex flex-col gap-3">
       <p className="text-sm text-muted-foreground" aria-live="polite">

@@ -1,10 +1,12 @@
 import "server-only";
 
 import {
+  and,
   asc,
   count,
   desc,
   eq,
+  isNotNull,
   or,
   sql,
   type SQL,
@@ -15,6 +17,7 @@ import { connection } from "next/server";
 import { db } from "@/db/client";
 import { contacts, notes, type Contact, type Note } from "@/db/schema";
 
+import { CONTACT_FREQUENCIES, CONTACT_FREQUENCY_DETAILS } from "./frequency";
 import { contactIdSchema } from "./validation";
 
 export type ContactListItem = Pick<
@@ -85,6 +88,62 @@ export async function getContact(id: string): Promise<Contact | null> {
     .where(eq(contacts.id, id))
     .limit(1);
   return contact ?? null;
+}
+
+export type DueContact = Pick<Contact, "id" | "name"> & {
+  lastNoteAt: Date | null;
+  /** First line of the last note, at most 200 characters */
+  lastNoteSnippet: string | null;
+  /** Full days (24 hours each) since the period ran out; 0 means less than a day */
+  overdueDays: number;
+};
+
+// The longest snippet worth sending: the row shows one line and cuts the rest.
+const SNIPPET_LENGTH = 200;
+
+/**
+ * Contacts it is time to get in touch with, most overdue first.
+ * The period counts from the last note, or, without notes, from when the
+ * frequency was set. Postgres adds months by the calendar (15 Sep + 1 month
+ * = 15 Oct), and "now" comes from one clock: the database's.
+ */
+export async function listDueContacts(): Promise<DueContact[]> {
+  await connection();
+
+  const lastNote = db
+    .select({
+      createdAt: notes.createdAt,
+      snippet: sql<string>`left(substring(${notes.body} from ${"^[^\\r\\n]*"}), ${SNIPPET_LENGTH})`.as(
+        "snippet",
+      ),
+    })
+    .from(notes)
+    .where(eq(notes.contactId, contacts.id))
+    .orderBy(desc(notes.createdAt))
+    .limit(1)
+    .as("last_note");
+
+  const frequencyInterval = sql`case ${contacts.contactFrequency} ${sql.join(
+    CONTACT_FREQUENCIES.map(
+      (frequency) =>
+        sql`when ${frequency}::contact_frequency then ${CONTACT_FREQUENCY_DETAILS[frequency].interval}::interval`,
+    ),
+    sql` `,
+  )} end`;
+  const dueAt = sql`(coalesce(${lastNote.createdAt}, ${contacts.contactFrequencySetAt}) + ${frequencyInterval})`;
+
+  return db
+    .select({
+      id: contacts.id,
+      name: contacts.name,
+      lastNoteAt: lastNote.createdAt,
+      lastNoteSnippet: lastNote.snippet,
+      overdueDays: sql<number>`floor(extract(epoch from now() - ${dueAt}) / 86400)::int`,
+    })
+    .from(contacts)
+    .leftJoinLateral(lastNote, sql`true`)
+    .where(and(isNotNull(contacts.contactFrequency), sql`${dueAt} <= now()`))
+    .orderBy(dueAt, asc(contacts.name), asc(contacts.id));
 }
 
 export async function listNotes(contactId: string): Promise<Note[]> {

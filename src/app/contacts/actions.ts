@@ -1,23 +1,28 @@
 "use server";
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 import { db } from "@/db/client";
 import { contacts, notes } from "@/db/schema";
+import type { ContactFrequency } from "@/lib/contacts/frequency";
+import {
+  CONTACT_NOT_FOUND,
+  CONTACTED_NOTE_BODY,
+  DELETE_FAILED,
+  SAVE_FAILED,
+  UNDO_CONTACTED_FAILED,
+} from "@/lib/contacts/messages";
 import {
   contactIdSchema,
   contactInputSchema,
   firstFieldErrors,
+  noteIdSchema,
   noteInputSchema,
   type ActionResult,
   type ContactFieldName,
   type ContactFormValues,
 } from "@/lib/contacts/validation";
-
-const SAVE_FAILED = "Не удалось сохранить. Проверьте, что база данных запущена, и попробуйте ещё раз.";
-const DELETE_FAILED = "Не удалось удалить. Проверьте, что база данных запущена, и попробуйте ещё раз.";
-const CONTACT_NOT_FOUND = "Контакт не найден — возможно, его уже нет в базе.";
 
 // Postgres error code for a foreign key violation.
 const FOREIGN_KEY_VIOLATION = "23503";
@@ -32,6 +37,23 @@ function isForeignKeyViolation(error: unknown): boolean {
   );
 }
 
+/**
+ * contact_frequency_set_at for an UPDATE that saves `frequency`. A contact
+ * without notes is due counting from when the frequency was set, so move that
+ * moment only when the frequency really changes. The old value is compared
+ * inside the same UPDATE (SET sees the row before the change), so there is no
+ * gap between reading and writing it.
+ */
+function frequencySetAtOnUpdate(frequency: ContactFrequency | null) {
+  const newFrequency = sql`${frequency}::contact_frequency`;
+  return sql`case
+    when ${newFrequency} is null then null
+    when ${contacts.contactFrequency} is not distinct from ${newFrequency}
+      then ${contacts.contactFrequencySetAt}
+    else now()
+  end`;
+}
+
 export async function createContact(
   values: ContactFormValues,
 ): Promise<ActionResult<{ id: string; name: string }, ContactFieldName>> {
@@ -43,7 +65,10 @@ export async function createContact(
   try {
     const [created] = await db
       .insert(contacts)
-      .values(parsed.data)
+      .values({
+        ...parsed.data,
+        contactFrequencySetAt: parsed.data.contactFrequency ? sql`now()` : null,
+      })
       .returning({ id: contacts.id, name: contacts.name });
 
     revalidatePath("/");
@@ -70,7 +95,11 @@ export async function updateContact(
   try {
     const [updated] = await db
       .update(contacts)
-      .set({ ...parsed.data, updatedAt: sql`now()` })
+      .set({
+        ...parsed.data,
+        contactFrequencySetAt: frequencySetAtOnUpdate(parsed.data.contactFrequency),
+        updatedAt: sql`now()`,
+      })
       .where(eq(contacts.id, id))
       .returning({ id: contacts.id });
 
@@ -81,6 +110,42 @@ export async function updateContact(
     return { ok: true, data: updated };
   } catch (error) {
     console.error("Failed to update contact", error);
+    return { ok: false, formError: SAVE_FAILED };
+  }
+}
+
+/** The frequency picker in the contact card: saves the choice right away. "" means "Не задано". */
+export async function updateContactFrequency(
+  contactId: string,
+  frequency: string,
+): Promise<ActionResult<null>> {
+  if (!contactIdSchema.safeParse(contactId).success) {
+    return { ok: false, formError: CONTACT_NOT_FOUND };
+  }
+
+  const parsed = contactInputSchema.shape.contactFrequency.safeParse(frequency);
+  if (!parsed.success) {
+    return { ok: false, formError: parsed.error.issues[0]?.message ?? SAVE_FAILED };
+  }
+
+  try {
+    const [updated] = await db
+      .update(contacts)
+      .set({
+        contactFrequency: parsed.data,
+        contactFrequencySetAt: frequencySetAtOnUpdate(parsed.data),
+        updatedAt: sql`now()`,
+      })
+      .where(eq(contacts.id, contactId))
+      .returning({ id: contacts.id });
+
+    if (!updated) return { ok: false, formError: CONTACT_NOT_FOUND };
+
+    revalidatePath("/");
+    revalidatePath(`/contacts/${contactId}`);
+    return { ok: true, data: null };
+  } catch (error) {
+    console.error("Failed to update contact frequency", error);
     return { ok: false, formError: SAVE_FAILED };
   }
 }
@@ -122,12 +187,72 @@ export async function addNote(
     return { ok: false, fieldErrors: firstFieldErrors(parsed.error) };
   }
 
+  return insertNote(contactId, parsed.data.body);
+}
+
+/** "Связались": a regular note, so the period starts again from now. */
+export async function markContacted(
+  contactId: string,
+): Promise<ActionResult<{ id: string }>> {
+  if (!contactIdSchema.safeParse(contactId).success) {
+    return { ok: false, formError: CONTACT_NOT_FOUND };
+  }
+
+  return insertNote(contactId, CONTACTED_NOTE_BODY);
+}
+
+/**
+ * "Отменить" after "Связались": deletes the note that press saved. The app
+ * cannot delete notes otherwise, so only a fresh "Связались" note of this
+ * contact goes: without these checks anyone could call this action directly
+ * and erase any note. The screen offers "Отменить" for 10 seconds; a minute
+ * here leaves room for a slow connection.
+ */
+export async function undoMarkContacted(
+  contactId: string,
+  noteId: string,
+): Promise<ActionResult<null>> {
+  if (!contactIdSchema.safeParse(contactId).success || !noteIdSchema.safeParse(noteId).success) {
+    return { ok: false, formError: UNDO_CONTACTED_FAILED };
+  }
+
+  try {
+    const [deleted] = await db
+      .delete(notes)
+      .where(
+        and(
+          eq(notes.id, noteId),
+          eq(notes.contactId, contactId),
+          eq(notes.body, CONTACTED_NOTE_BODY),
+          sql`${notes.createdAt} > now() - interval '1 minute'`,
+        ),
+      )
+      .returning({ id: notes.id });
+
+    if (!deleted) return { ok: false, formError: UNDO_CONTACTED_FAILED };
+
+    // The contact is due again: back into "Пора связаться".
+    revalidatePath("/");
+    revalidatePath(`/contacts/${contactId}`);
+    return { ok: true, data: null };
+  } catch (error) {
+    console.error("Failed to undo «Связались»", error);
+    return { ok: false, formError: UNDO_CONTACTED_FAILED };
+  }
+}
+
+async function insertNote(
+  contactId: string,
+  body: string,
+): Promise<ActionResult<{ id: string }>> {
   try {
     const [created] = await db
       .insert(notes)
-      .values({ contactId, body: parsed.data.body })
+      .values({ contactId, body })
       .returning({ id: notes.id });
 
+    // A new note starts the period again: the contact leaves "Пора связаться".
+    revalidatePath("/");
     revalidatePath(`/contacts/${contactId}`);
     return { ok: true, data: created };
   } catch (error) {

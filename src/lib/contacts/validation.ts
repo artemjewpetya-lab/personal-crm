@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { CONTACT_FREQUENCIES } from "./frequency";
+
 // Validation is shared by the forms (field names, error shape) and the server
 // actions (the actual check). Messages are shown to the user, so they are in Russian.
 
@@ -31,6 +33,15 @@ export const contactInputSchema = z.object({
       "Проверьте адрес почты — например, name@example.com",
     )
     .transform((value) => (value === "" ? null : value.toLowerCase())),
+  // The form sends "" for "Не задано".
+  contactFrequency: z
+    .string()
+    .pipe(
+      z.enum(["", ...CONTACT_FREQUENCIES], {
+        error: "Выберите, как часто общаться, из списка",
+      }),
+    )
+    .transform((value) => (value === "" ? null : value)),
 });
 
 export const noteInputSchema = z.object({
@@ -42,6 +53,7 @@ export const noteInputSchema = z.object({
 });
 
 export const contactIdSchema = z.uuid();
+export const noteIdSchema = z.uuid();
 
 export type ContactFormValues = z.input<typeof contactInputSchema>;
 export type ContactFieldName = keyof ContactFormValues;

@@ -13,8 +13,10 @@ import { Fragment, Suspense, type ReactNode } from "react";
 
 import { AddNoteForm } from "@/components/add-note-form";
 import { ContactAvatar } from "@/components/contact-avatar";
+import { ContactFrequencyPicker } from "@/components/contact-frequency-picker";
 import { DeleteContactDialog } from "@/components/delete-contact-dialog";
 import { EditContactDialog } from "@/components/edit-contact-dialog";
+import { MarkContactedButton } from "@/components/mark-contacted-button";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -69,6 +71,14 @@ async function ContactDetails({
             {contact.about && (
               <p className="mt-1 text-muted-foreground">{contact.about}</p>
             )}
+            <div className="mt-2.5 flex flex-wrap items-center gap-2">
+              <ContactFrequencyPicker
+                contactId={contact.id}
+                frequency={contact.contactFrequency}
+              />
+              {/* Without a frequency there is no period to start again */}
+              {contact.contactFrequency && <MarkContactedButton contactId={contact.id} />}
+            </div>
           </div>
           <div className="col-start-2 flex flex-wrap gap-2 sm:col-start-3">
             <EditContactDialog
@@ -79,6 +89,7 @@ async function ContactDetails({
                 howWeMet: contact.howWeMet,
                 phone: contact.phone,
                 email: contact.email,
+                contactFrequency: contact.contactFrequency,
               }}
             />
             <DeleteContactDialog

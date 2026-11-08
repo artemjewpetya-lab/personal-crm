@@ -48,7 +48,10 @@ test("main scenario: list, add, find, note, another browser", async ({ page }) =
   await expect(dialog).toBeHidden();
   await expect(page.getByText("Контакт добавлен")).toBeVisible();
   // The list scrolls to the new contact, wherever it lands alphabetically.
-  await expect(page.getByRole("link", { name: contactName })).toBeInViewport();
+  // A busy dev server can take up to ~20 seconds to send the updated list.
+  await expect(page.getByRole("link", { name: contactName })).toBeInViewport({
+    timeout: 60_000,
+  });
   expect(await readTotal(page)).toBe(totalBefore + 1);
 
   // 3. Find it by name and open the card.

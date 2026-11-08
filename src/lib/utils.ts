@@ -6,7 +6,18 @@ import { createCn } from "cn/config";
 export const cn = createCn({
   extend: {
     theme: {
-      text: ["h1", "h2", "number", "tile", "tile-lg", "label", "logo", "logo-lg"],
+      text: [
+        "h1",
+        "h2",
+        "number",
+        "tile",
+        "tile-lg",
+        "label",
+        "logo",
+        "logo-lg",
+        "row-title",
+        "meta",
+      ],
       radius: ["logo", "icon-box", "button", "tile", "card", "bubble-tail"],
     },
   },

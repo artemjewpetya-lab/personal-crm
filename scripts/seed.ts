@@ -19,12 +19,15 @@ import {
   type NewContact,
   type NewNote,
 } from "../src/db/schema";
+import { CONTACT_FREQUENCIES } from "../src/lib/contacts/frequency";
 
 loadEnvConfig(process.cwd());
 
 const CONTACT_COUNT = 1000;
 const RANDOM_SEED = 42;
 const INSERT_CHUNK_SIZE = 500;
+// Share of contacts with a contact frequency, so "Пора связаться" shows up right away.
+const FREQUENCY_SHARE = 0.15;
 
 type Sex = "male" | "female";
 
@@ -357,6 +360,16 @@ async function main() {
       const generated = makeContact(now);
       contactRows.push(generated.contact);
       noteRows.push(...generated.notes);
+    }
+
+    // Drawn after everything else, so the contacts and notes themselves stay
+    // the same as before frequencies existed. The frequency counts from the
+    // day the contact was added.
+    for (const contact of contactRows) {
+      if (faker.datatype.boolean(FREQUENCY_SHARE)) {
+        contact.contactFrequency = pick(CONTACT_FREQUENCIES);
+        contact.contactFrequencySetAt = contact.createdAt;
+      }
     }
 
     await db.transaction(async (tx) => {

@@ -27,6 +27,18 @@ export function formatDateTime(date: Date): string {
   return dateTimeFormat.format(date);
 }
 
+/** 15 Sep 2026 -> "15 сентября 2026 г." */
+export function formatDate(date: Date): string {
+  return dateFormat.format(date);
+}
+
+/** 24 -> "Просрочено на 24 дня"; less than a full day -> "Пора сегодня" */
+export function formatOverdue(days: number): string {
+  return days < 1
+    ? "Пора сегодня"
+    : `Просрочено на ${pluralize(days, ["день", "дня", "дней"])}`;
+}
+
 /** 14 Oct 2026 -> { day: "14", rest: "октября 2026 г." }: the day is shown large, like on the landing */
 export function formatDateParts(date: Date): { day: string; rest: string } {
   const parts = dateFormat.formatToParts(date);

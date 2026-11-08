@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // The landing page is its own repo, kept on disk inside this folder (see .gitignore).
+    "personal-crm-landing/**",
   ]),
 ]);
 

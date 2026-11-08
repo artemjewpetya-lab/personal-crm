@@ -1,10 +1,13 @@
 "use client";
 
-import { useId, type FormEvent, type ReactNode } from "react";
+import { useId, useState, type FormEvent, type ReactNode } from "react";
 
+import { FREQUENCY_OPTIONS, FrequencyOptions } from "@/components/frequency-options";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Select, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { isContactFrequency } from "@/lib/contacts/frequency";
 import type {
   ContactFieldName,
   ContactFormValues,
@@ -12,7 +15,7 @@ import type {
 } from "@/lib/contacts/validation";
 
 type FieldConfig = {
-  name: ContactFieldName;
+  name: Exclude<ContactFieldName, "contactFrequency">;
   label: string;
   placeholder: string;
   type?: "text" | "tel" | "email";
@@ -64,6 +67,7 @@ export function readContactForm(form: HTMLFormElement): ContactFormValues {
     howWeMet: text("howWeMet"),
     phone: text("phone"),
     email: text("email"),
+    contactFrequency: text("contactFrequency"),
   };
 }
 
@@ -125,6 +129,11 @@ export function ContactForm({
             </Field>
           );
         })}
+        <FrequencyField
+          id={`${idPrefix}-contactFrequency`}
+          defaultValue={defaultValues?.contactFrequency}
+          error={errors.contactFrequency}
+        />
       </FieldGroup>
       {formError && (
         <p role="alert" className="text-sm text-destructive">
@@ -133,5 +142,43 @@ export function ContactForm({
       )}
       {footer}
     </form>
+  );
+}
+
+function FrequencyField({
+  id,
+  defaultValue,
+  error,
+}: {
+  id: string;
+  defaultValue: string | null | undefined;
+  error: string | undefined;
+}) {
+  // Taken once, when the form opens. After saving, the card re-renders with the
+  // new value while the dialog is still closing, and Select warns if its
+  // starting value changes after it has started.
+  const [initialValue] = useState(() =>
+    isContactFrequency(defaultValue) ? defaultValue : null,
+  );
+
+  return (
+    <Field data-invalid={error ? true : undefined}>
+      <FieldLabel htmlFor={id}>Как часто общаться</FieldLabel>
+      <Select
+        id={id}
+        name="contactFrequency"
+        items={FREQUENCY_OPTIONS}
+        defaultValue={initialValue}
+      >
+        <SelectTrigger
+          aria-invalid={error ? true : undefined}
+          className="h-10 w-full rounded-lg bg-card pr-3 pl-3.5 text-base data-popup-open:border-ring md:text-sm data-[size=default]:h-10"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <FrequencyOptions />
+      </Select>
+      <FieldError>{error}</FieldError>
+    </Field>
   );
 }

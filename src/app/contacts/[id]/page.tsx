@@ -13,6 +13,7 @@ import { Fragment, Suspense, type ReactNode } from "react";
 
 import { AddNoteForm } from "@/components/add-note-form";
 import { ContactAvatar } from "@/components/contact-avatar";
+import { DeleteContactDialog } from "@/components/delete-contact-dialog";
 import { EditContactDialog } from "@/components/edit-contact-dialog";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -69,7 +70,7 @@ async function ContactDetails({
               <p className="mt-1 text-muted-foreground">{contact.about}</p>
             )}
           </div>
-          <div className="col-start-2 sm:col-start-3">
+          <div className="col-start-2 flex flex-wrap gap-2 sm:col-start-3">
             <EditContactDialog
               contactId={contact.id}
               defaultValues={{
@@ -79,6 +80,11 @@ async function ContactDetails({
                 phone: contact.phone,
                 email: contact.email,
               }}
+            />
+            <DeleteContactDialog
+              contactId={contact.id}
+              name={contact.name}
+              noteCount={notes.length}
             />
           </div>
         </div>

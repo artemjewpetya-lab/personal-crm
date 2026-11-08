@@ -16,6 +16,7 @@ import {
 } from "@/lib/contacts/validation";
 
 const SAVE_FAILED = "Не удалось сохранить. Проверьте, что база данных запущена, и попробуйте ещё раз.";
+const DELETE_FAILED = "Не удалось удалить. Проверьте, что база данных запущена, и попробуйте ещё раз.";
 const CONTACT_NOT_FOUND = "Контакт не найден — возможно, его уже нет в базе.";
 
 // Postgres error code for a foreign key violation.
@@ -81,6 +82,30 @@ export async function updateContact(
   } catch (error) {
     console.error("Failed to update contact", error);
     return { ok: false, formError: SAVE_FAILED };
+  }
+}
+
+// The contact's notes are deleted with it (on delete cascade).
+export async function deleteContact(
+  id: string,
+): Promise<ActionResult<{ name: string }>> {
+  if (!contactIdSchema.safeParse(id).success) {
+    return { ok: false, formError: CONTACT_NOT_FOUND };
+  }
+
+  try {
+    const [deleted] = await db
+      .delete(contacts)
+      .where(eq(contacts.id, id))
+      .returning({ name: contacts.name });
+
+    if (!deleted) return { ok: false, formError: CONTACT_NOT_FOUND };
+
+    revalidatePath("/");
+    return { ok: true, data: deleted };
+  } catch (error) {
+    console.error("Failed to delete contact", error);
+    return { ok: false, formError: DELETE_FAILED };
   }
 }
 

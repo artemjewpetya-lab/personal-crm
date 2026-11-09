@@ -3,7 +3,7 @@ import { Pool } from "pg";
 
 import { getDatabaseUrl } from "../src/db/database-url";
 
-// Requirements: openspec/changes/keep-in-touch/specs/keep-in-touch/spec.md
+// Requirements: openspec/specs/keep-in-touch/spec.md
 // - a contact has a frequency, set in the contact form and shown in the card
 // - the due date counts from the last note, or from when the frequency was set
 // - "Пора связаться" on the home page lists overdue contacts, most overdue first
@@ -745,6 +745,36 @@ test.describe("frequency from the contact card", () => {
     await page.getByRole("link", { name: "Все контакты" }).click();
     await waitForHomeList(page);
     await expect(dueBlock(page).getByRole("link", { name })).toHaveCount(0);
+  });
+
+  test("the frequency and the block are the same in another browser", async ({
+    page,
+    browser,
+    baseURL,
+    locale,
+  }) => {
+    const name = `Тимур ${marker}`;
+    // Without a frequency, the last note in 1990: due once the frequency is set.
+    const id = await createContact({
+      name,
+      notes: [{ body: "Давняя заметка", createdAt: { at: "1990-01-01T12:00:00Z" } }],
+    });
+    await page.goto(`/contacts/${id}`);
+    await pickFrequencyInCard(page, "Раз в месяц");
+    await expect.poll(async () => (await readContact(id)).contact_frequency).toBe("month");
+
+    // Another browser: nothing shared with the first one but the site.
+    const other = await browser.newContext({ baseURL, locale });
+    try {
+      const otherPage = await other.newPage();
+      await otherPage.goto(`/contacts/${id}`);
+      await expect(frequencyPicker(otherPage)).toContainText("Общаемся раз в месяц");
+
+      await otherPage.goto("/");
+      await expect(dueRow(otherPage, name)).toBeVisible();
+    } finally {
+      await other.close();
+    }
   });
 
   test("choosing the same frequency keeps where the period starts", async ({ page }) => {

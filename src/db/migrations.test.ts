@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { createTemporaryDatabase, type TemporaryDatabase } from "../../test/migrations";
 
+const LAST_MIGRATION_BEFORE_FREQUENCY = "0000_init";
 const LAST_MIGRATION_BEFORE_GROUPS = "0001_contact_frequency";
 
 describe("migrations", () => {
@@ -52,6 +53,35 @@ describe("migrations", () => {
     expect(await snapshot(database)).toEqual(before);
     const { rows: links } = await database.pool.query("select * from contact_groups");
     expect(links).toEqual([]);
+  });
+
+  it("Контакты, добавленные до частоты общения", async () => {
+    await database.migrate({ upTo: LAST_MIGRATION_BEFORE_FREQUENCY });
+    const {
+      rows: [anna],
+    } = await database.pool.query<{ id: string }>(
+      `insert into contacts (name, about, phone, email)
+       values ('Анна', 'Коллега', '+7 900 123-45-67', 'anna@example.com')
+       returning id`,
+    );
+    await database.pool.query("insert into contacts (name) values ('Борис')");
+    await database.pool.query(
+      "insert into notes (contact_id, body) values ($1, 'Договорились о встрече')",
+      [anna.id],
+    );
+    const before = await snapshot(database);
+
+    await database.migrate({ upTo: LAST_MIGRATION_BEFORE_GROUPS });
+
+    // Everything as it was, and every contact has «Не задано».
+    expect(await snapshot(database)).toEqual({
+      contacts: before.contacts.map((contact) => ({
+        ...contact,
+        contact_frequency: null,
+        contact_frequency_set_at: null,
+      })),
+      notes: before.notes,
+    });
   });
 
   it("Удалённая готовая группа не возвращается", async () => {

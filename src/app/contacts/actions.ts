@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 
 import { db } from "@/db/client";
 import { contacts, notes } from "@/db/schema";
+import { setContactGroups } from "@/lib/groups/mutations";
 import type { ContactFrequency } from "@/lib/contacts/frequency";
 import {
   CONTACT_NOT_FOUND,
@@ -14,6 +15,7 @@ import {
   UNDO_CONTACTED_FAILED,
 } from "@/lib/contacts/messages";
 import {
+  contactFieldErrors,
   contactIdSchema,
   contactInputSchema,
   firstFieldErrors,
@@ -59,19 +61,28 @@ export async function createContact(
 ): Promise<ActionResult<{ id: string; name: string }, ContactFieldName>> {
   const parsed = contactInputSchema.safeParse(values);
   if (!parsed.success) {
-    return { ok: false, fieldErrors: firstFieldErrors(parsed.error) };
+    return { ok: false, fieldErrors: contactFieldErrors(parsed.error) };
   }
+  const { groupIds, newGroupNames, ...fields } = parsed.data;
 
   try {
-    const [created] = await db
-      .insert(contacts)
-      .values({
-        ...parsed.data,
-        contactFrequencySetAt: parsed.data.contactFrequency ? sql`now()` : null,
-      })
-      .returning({ id: contacts.id, name: contacts.name });
+    // The contact and its groups are saved together: all or nothing.
+    const created = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(contacts)
+        .values({
+          ...fields,
+          contactFrequencySetAt: fields.contactFrequency ? sql`now()` : null,
+        })
+        .returning({ id: contacts.id, name: contacts.name });
+      if (groupIds || newGroupNames) {
+        await setContactGroups(tx, row.id, groupIds ?? [], newGroupNames ?? []);
+      }
+      return row;
+    });
 
     revalidatePath("/");
+    revalidatePath("/groups");
     return { ok: true, data: created };
   } catch (error) {
     console.error("Failed to create contact", error);
@@ -89,23 +100,33 @@ export async function updateContact(
 
   const parsed = contactInputSchema.safeParse(values);
   if (!parsed.success) {
-    return { ok: false, fieldErrors: firstFieldErrors(parsed.error) };
+    return { ok: false, fieldErrors: contactFieldErrors(parsed.error) };
   }
+  const { groupIds, newGroupNames, ...fields } = parsed.data;
 
   try {
-    const [updated] = await db
-      .update(contacts)
-      .set({
-        ...parsed.data,
-        contactFrequencySetAt: frequencySetAtOnUpdate(parsed.data.contactFrequency),
-        updatedAt: sql`now()`,
-      })
-      .where(eq(contacts.id, id))
-      .returning({ id: contacts.id });
+    // The contact and its groups are saved together: all or nothing.
+    const updated = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(contacts)
+        .set({
+          ...fields,
+          contactFrequencySetAt: frequencySetAtOnUpdate(fields.contactFrequency),
+          updatedAt: sql`now()`,
+        })
+        .where(eq(contacts.id, id))
+        .returning({ id: contacts.id });
+      // A deleted contact: no group is created for it.
+      if (row && (groupIds || newGroupNames)) {
+        await setContactGroups(tx, row.id, groupIds ?? [], newGroupNames ?? []);
+      }
+      return row;
+    });
 
     if (!updated) return { ok: false, formError: CONTACT_NOT_FOUND };
 
     revalidatePath("/");
+    revalidatePath("/groups");
     revalidatePath(`/contacts/${id}`);
     return { ok: true, data: updated };
   } catch (error) {

@@ -23,10 +23,25 @@ import type {
   ContactFormValues,
   FieldErrors,
 } from "@/lib/contacts/validation";
+import type { PickerGroup } from "@/lib/groups/picker";
 
 import { revealContactRow } from "./contact-row-reveal";
 
-export function AddContactDialog() {
+// On phones a regular-size button, so it fits on one line with the heading
+const TRIGGER_CLASS =
+  "max-sm:h-10 max-sm:gap-2 max-sm:rounded-lg max-sm:px-3.5 max-sm:text-sm max-sm:[&_svg:not([class*='size-'])]:size-4";
+
+/** The button while the groups for the form are still loading. */
+export function AddContactButtonFallback() {
+  return (
+    <Button size="lg" disabled className={TRIGGER_CLASS}>
+      <PlusIcon data-icon="inline-start" />
+      Добавить контакт
+    </Button>
+  );
+}
+
+export function AddContactDialog({ groups }: { groups: PickerGroup[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [errors, setErrors] = useState<FieldErrors<ContactFieldName>>({});
@@ -65,15 +80,7 @@ export function AddContactDialog() {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      {/* On phones a regular-size button, so it fits on one line with the heading */}
-      <DialogTrigger
-        render={
-          <Button
-            size="lg"
-            className="max-sm:h-10 max-sm:gap-2 max-sm:rounded-lg max-sm:px-3.5 max-sm:text-sm max-sm:[&_svg:not([class*='size-'])]:size-4"
-          />
-        }
-      >
+      <DialogTrigger render={<Button size="lg" className={TRIGGER_CLASS} />}>
         <PlusIcon data-icon="inline-start" />
         Добавить контакт
       </DialogTrigger>
@@ -85,6 +92,7 @@ export function AddContactDialog() {
           </DialogDescription>
         </DialogHeader>
         <ContactForm
+          groups={groups}
           errors={errors}
           formError={formError}
           onSubmit={handleSubmit}

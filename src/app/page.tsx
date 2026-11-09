@@ -2,7 +2,10 @@ import { SearchXIcon, UsersIcon } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 
-import { AddContactDialog } from "@/components/add-contact-dialog";
+import {
+  AddContactButtonFallback,
+  AddContactDialog,
+} from "@/components/add-contact-dialog";
 import { ContactAvatar } from "@/components/contact-avatar";
 import { contactRowId } from "@/components/contact-row-reveal";
 import {
@@ -10,6 +13,7 @@ import {
   ContactSearchFallback,
 } from "@/components/contact-search";
 import { KeepInTouchList, type KeepInTouchItem } from "@/components/keep-in-touch-list";
+import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   countContacts,
@@ -19,6 +23,8 @@ import {
   type DueContact,
 } from "@/lib/contacts/queries";
 import { formatDate, formatOverdue, pluralize } from "@/lib/format";
+import { resolveGroupFilter } from "@/lib/groups/filter";
+import { listGroups } from "@/lib/groups/queries";
 
 const CONTACT_WORDS: [string, string, string] = ["контакт", "контакта", "контактов"];
 
@@ -28,10 +34,26 @@ export default function ContactsPage({ searchParams }: PageProps<"/">) {
       <div className="sticky top-0 z-10 -mx-5 flex flex-col gap-4 bg-background/95 px-5 pt-4 pb-4 backdrop-blur supports-backdrop-filter:bg-background/80 lg:pt-6">
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
           <h1 className="font-heading text-h2 font-semibold md:text-h1">Контакты</h1>
-          <AddContactDialog />
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Link
+              href="/groups"
+              className={buttonVariants({
+                variant: "outline",
+                size: "lg",
+                className:
+                  "max-sm:h-10 max-sm:gap-2 max-sm:rounded-lg max-sm:px-3.5 max-sm:text-sm max-sm:[&_svg:not([class*='size-'])]:size-4",
+              })}
+            >
+              <UsersIcon data-icon="inline-start" />
+              Группы
+            </Link>
+            <Suspense fallback={<AddContactButtonFallback />}>
+              <AddContact />
+            </Suspense>
+          </div>
         </div>
         <Suspense fallback={<ContactSearchFallback />}>
-          <ContactSearch />
+          <ContactFilters />
         </Suspense>
       </div>
       <Suspense fallback={<ContactListSkeleton />}>
@@ -41,17 +63,30 @@ export default function ContactsPage({ searchParams }: PageProps<"/">) {
   );
 }
 
+// The groups are read here, inside Suspense, so the page shell does not wait for them.
+async function AddContact() {
+  return <AddContactDialog groups={await listGroups()} />;
+}
+
+async function ContactFilters() {
+  return <ContactSearch groups={await listGroups()} />;
+}
+
 async function ContactList({
   searchParams,
 }: Pick<PageProps<"/">, "searchParams">) {
-  const { q } = await searchParams;
+  const { q, group } = await searchParams;
   const search = typeof q === "string" ? q.trim() : "";
   // "Пора связаться" is hidden while searching, so it is not even read then.
-  const [items, total, due] = await Promise.all([
-    listContacts(search),
+  // The group filter does not touch it. A group that does not exist filters nothing.
+  const [items, total, due, groups] = await Promise.all([
+    listContacts(search, typeof group === "string" ? group : null),
     countContacts(),
     search ? [] : listDueContacts(),
+    listGroups(),
   ]);
+  const groupId = resolveGroupFilter(group, groups);
+  const groupName = groups.find((item) => item.id === groupId)?.name ?? null;
 
   return (
     <>
@@ -64,7 +99,7 @@ async function ContactList({
           <KeepInTouchList items={due.map(toKeepInTouchItem)} />
         </Suspense>
       )}
-      <ContactListSection search={search} items={items} total={total} />
+      <ContactListSection search={search} groupName={groupName} items={items} total={total} />
     </>
   );
 }
@@ -83,24 +118,26 @@ function toKeepInTouchItem(contact: DueContact): KeepInTouchItem {
 
 function ContactListSection({
   search,
+  groupName,
   items,
   total,
 }: {
   search: string;
+  groupName: string | null;
   items: ContactListItem[];
   total: number;
 }) {
   return (
     <section aria-label="Список контактов" className="flex flex-col gap-3">
       <p className="text-sm text-muted-foreground" aria-live="polite">
-        {search
+        {search || groupName
           ? `Найдено: ${pluralize(items.length, CONTACT_WORDS)} из ${total.toLocaleString("ru-RU")}`
           : `Всего ${pluralize(total, CONTACT_WORDS)}`}
       </p>
       {items.length > 0 ? (
         <ContactTable items={items} />
       ) : (
-        <EmptyState search={search} />
+        <EmptyState search={search} groupName={groupName} />
       )}
     </section>
   );
@@ -111,7 +148,7 @@ function ContactTable({ items }: { items: ContactListItem[] }) {
   // thousands of rows, and this keeps the page noticeably lighter.
   return (
     <div className="overflow-hidden rounded-card bg-card">
-      <table className="w-full table-fixed text-sm [&_td]:border-t [&_td]:px-3 [&_td]:py-3 [&_td]:align-middle [&_td:first-child]:pl-5 [&_td:last-child]:pr-5 [&_tbody_tr]:relative [&_tbody_tr]:transition-colors [&_tbody_tr:hover]:bg-muted [&_tbody_tr:has(a:focus-visible)]:bg-dusty/60 [&_th]:h-12 [&_th]:px-3 [&_th]:text-left [&_th]:text-label [&_th]:font-semibold [&_th]:text-muted-foreground [&_th]:uppercase [&_th:first-child]:pl-5 [&_th:last-child]:pr-5">
+      <table className="w-full table-fixed text-sm [&_td]:border-t [&_td]:px-3 [&_td]:py-3 [&_td]:align-middle [&_td:first-child]:pl-5 [&_td:last-child]:pr-5 [&_tbody_tr]:relative [&_tbody_tr]:transition-colors [&_tbody_tr:hover]:bg-muted [&_tbody_tr:has(a:focus-visible)]:bg-dusty/60 [&_th]:h-12 [&_th]:px-3 [&_th]:text-left [&_th]:text-label [&_th]:font-semibold [&_th]:text-muted-foreground [&_th]:uppercase [&_th:first-child]:pl-5 [&_th:last-child]:pr-5 [&_ul]:mt-1 [&_ul]:flex [&_ul]:flex-wrap [&_ul]:gap-1 [&_li]:rounded-full [&_li]:bg-secondary [&_li]:px-2 [&_li]:text-xs [&_li]:leading-5 [&_li]:font-medium [&_li]:text-secondary-foreground">
         <thead>
           <tr>
             <th scope="col" className="w-auto md:w-[34%]">
@@ -150,6 +187,13 @@ function ContactTable({ items }: { items: ContactListItem[] }) {
                         {contact.about}
                       </div>
                     )}
+                    {contact.groups.length > 0 && (
+                      <ul aria-label="Группы">
+                        {contact.groups.map((group) => (
+                          <li key={group.id}>{group.name}</li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 </div>
               </td>
@@ -168,7 +212,7 @@ function ContactTable({ items }: { items: ContactListItem[] }) {
   );
 }
 
-function EmptyState({ search }: { search: string }) {
+function EmptyState({ search, groupName }: { search: string; groupName: string | null }) {
   const Icon = search ? SearchXIcon : UsersIcon;
   return (
     <div className="flex flex-col items-center gap-2 rounded-card bg-card px-6 py-16 text-center">
@@ -184,6 +228,10 @@ function EmptyState({ search }: { search: string }) {
             Проверьте написание или поищите по части имени.
           </p>
         </>
+      ) : groupName ? (
+        <p className="font-heading font-semibold break-words">
+          В группе «{groupName}» пока никого нет
+        </p>
       ) : (
         <>
           <p className="font-heading font-semibold">Пока нет ни одного контакта</p>

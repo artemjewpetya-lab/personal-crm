@@ -1,4 +1,14 @@
-import { index, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import {
+  index,
+  pgEnum,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 // Relative import: drizzle-kit and the seed script load this file without the "@/" alias.
 import { CONTACT_FREQUENCIES } from "../lib/contacts/frequency";
@@ -52,7 +62,48 @@ export const notes = pgTable(
   ],
 );
 
+export const groups = pgTable(
+  "groups",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    // Two names that differ only in letter case or "е"/"ё" are the same name.
+    // The database checks it, so two simultaneous requests cannot create a twin.
+    uniqueIndex("groups_name_unique_idx").on(
+      sql`translate(lower(${table.name}), 'ё', 'е')`,
+    ),
+  ],
+);
+
+// Which contact is in which group. Deleting either side removes only the link.
+export const contactGroups = pgTable(
+  "contact_groups",
+  {
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.contactId, table.groupId] }),
+    // For the filter on the home page: contacts of one group.
+    index("contact_groups_group_id_idx").on(table.groupId),
+  ],
+);
+
 export type Contact = typeof contacts.$inferSelect;
 export type NewContact = typeof contacts.$inferInsert;
 export type Note = typeof notes.$inferSelect;
 export type NewNote = typeof notes.$inferInsert;
+export type Group = typeof groups.$inferSelect;
+export type NewGroup = typeof groups.$inferInsert;

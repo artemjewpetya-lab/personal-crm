@@ -15,7 +15,17 @@ import {
 import { connection } from "next/server";
 
 import { db } from "@/db/client";
-import { contacts, notes, type Contact, type Note } from "@/db/schema";
+import {
+  contactGroups,
+  contacts,
+  groups,
+  notes,
+  type Contact,
+  type Group,
+  type Note,
+} from "@/db/schema";
+import { normalizedGroupName } from "@/lib/groups/sql";
+import { groupIdSchema } from "@/lib/groups/validation";
 
 import { CONTACT_FREQUENCIES, CONTACT_FREQUENCY_DETAILS } from "./frequency";
 import { contactIdSchema } from "./validation";
@@ -23,7 +33,10 @@ import { contactIdSchema } from "./validation";
 export type ContactListItem = Pick<
   Contact,
   "id" | "name" | "about" | "phone" | "email"
->;
+> & {
+  /** All groups of the contact by name, whatever group the list is filtered by */
+  groups: Pick<Group, "id" | "name">[];
+};
 
 // Lowercase and treat "ё" as "е", so "Артем" finds "Артём".
 function normalizeForSearch(value: SQLWrapper | string) {
@@ -53,9 +66,30 @@ function searchCondition(search: string): SQL | undefined {
   return or(...conditions);
 }
 
-export async function listContacts(search: string): Promise<ContactListItem[]> {
+/**
+ * The contacts by name, optionally only those matching `search` and/or only
+ * those in the group `groupId` (both conditions together). Each row carries
+ * its groups, read by the same query: no extra request per row.
+ */
+// Drizzle writes a column of a single-table query without its table name, and inside
+// a subquery that bare "id" would mean the id of the subquery's own table. So the
+// reference to the outer contact is spelled out.
+const contactIdRef = sql`"contacts"."id"`;
+
+export async function listContacts(
+  search: string,
+  groupId?: string | null,
+): Promise<ContactListItem[]> {
   // Always read fresh data at request time, never during the build.
   await connection();
+
+  const inGroup =
+    groupId && groupIdSchema.safeParse(groupId).success
+      // A group that no longer exists filters nothing (the same as «Все группы»): the page
+      // can start reading the contacts without waiting to learn which groups exist.
+      ? sql`(not exists (select 1 from ${groups} where ${groups.id} = ${groupId})
+          or exists (select 1 from ${contactGroups} where ${contactGroups.contactId} = ${contactIdRef} and ${contactGroups.groupId} = ${groupId}))`
+      : undefined;
 
   return db
     .select({
@@ -64,9 +98,16 @@ export async function listContacts(search: string): Promise<ContactListItem[]> {
       about: contacts.about,
       phone: contacts.phone,
       email: contacts.email,
+      groups: sql<ContactListItem["groups"]>`coalesce(
+        (select json_agg(json_build_object('id', ${groups.id}, 'name', ${groups.name})
+                order by ${normalizedGroupName(groups.name)}, ${groups.name})
+           from ${contactGroups}
+           inner join ${groups} on ${groups.id} = ${contactGroups.groupId}
+          where ${contactGroups.contactId} = ${contactIdRef}),
+        '[]'::json)`,
     })
     .from(contacts)
-    .where(search ? searchCondition(search) : undefined)
+    .where(and(search ? searchCondition(search) : undefined, inGroup))
     .orderBy(asc(contacts.name), asc(contacts.createdAt));
 }
 

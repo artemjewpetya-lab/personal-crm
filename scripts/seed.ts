@@ -8,13 +8,15 @@
  */
 import { fakerRU as faker } from "@faker-js/faker";
 import { loadEnvConfig } from "@next/env";
-import { count } from "drizzle-orm";
+import { count, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
 import { getDatabaseUrl } from "../src/db/database-url";
 import {
+  contactGroups,
   contacts,
+  groups,
   notes,
   type NewContact,
   type NewNote,
@@ -28,6 +30,14 @@ const RANDOM_SEED = 42;
 const INSERT_CHUNK_SIZE = 500;
 // Share of contacts with a contact frequency, so "Пора связаться" shows up right away.
 const FREQUENCY_SHARE = 0.15;
+
+// Share of contacts put into each ready-made group. The draws are independent,
+// so some contacts end up in two groups.
+const GROUP_SHARES: { name: string; share: number }[] = [
+  { name: "Семья", share: 0.03 },
+  { name: "Друзья", share: 0.1 },
+  { name: "Коллеги", share: 0.2 },
+];
 
 type Sex = "male" | "female";
 
@@ -381,8 +391,32 @@ async function main() {
       }
     });
 
+    // Drawn last for the same reason. A ready-made group that was deleted or
+    // renamed is skipped.
+    const groupIdsByName = new Map(
+      (
+        await db
+          .select({ id: groups.id, name: groups.name })
+          .from(groups)
+          .where(inArray(groups.name, GROUP_SHARES.map(({ name }) => name)))
+      ).map((group) => [group.name, group.id]),
+    );
+    const membershipRows: { contactId: string; groupId: string }[] = [];
+    for (const { name, share } of GROUP_SHARES) {
+      const groupId = groupIdsByName.get(name);
+      for (const contact of contactRows) {
+        // Drawn even for a missing group, so the other groups get the same contacts.
+        if (faker.datatype.boolean(share) && groupId) {
+          membershipRows.push({ contactId: contact.id!, groupId });
+        }
+      }
+    }
+    for (const rows of chunk(membershipRows, INSERT_CHUNK_SIZE)) {
+      await db.insert(contactGroups).values(rows);
+    }
+
     console.log(
-      `Inserted ${contactRows.length} contacts and ${noteRows.length} notes.`,
+      `Inserted ${contactRows.length} contacts, ${noteRows.length} notes and ${membershipRows.length} group memberships.`,
     );
   } finally {
     await pool.end();

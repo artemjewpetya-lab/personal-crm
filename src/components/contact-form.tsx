@@ -2,12 +2,14 @@
 
 import { useId, useState, type FormEvent, type ReactNode } from "react";
 
+import { ContactGroupsField, splitChosenGroups } from "@/components/contact-groups-field";
 import { FREQUENCY_OPTIONS, FrequencyOptions } from "@/components/frequency-options";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { isContactFrequency } from "@/lib/contacts/frequency";
+import type { PickerGroup } from "@/lib/groups/picker";
 import type {
   ContactFieldName,
   ContactFormValues,
@@ -15,7 +17,7 @@ import type {
 } from "@/lib/contacts/validation";
 
 type FieldConfig = {
-  name: Exclude<ContactFieldName, "contactFrequency">;
+  name: Exclude<ContactFieldName, "contactFrequency" | "groups">;
   label: string;
   placeholder: string;
   type?: "text" | "tel" | "email";
@@ -60,7 +62,7 @@ const FIELDS: FieldConfig[] = [
 
 export function readContactForm(form: HTMLFormElement): ContactFormValues {
   const data = new FormData(form);
-  const text = (name: ContactFieldName) => String(data.get(name) ?? "");
+  const text = (name: Exclude<ContactFieldName, "groups">) => String(data.get(name) ?? "");
   return {
     name: text("name"),
     about: text("about"),
@@ -73,22 +75,30 @@ export function readContactForm(form: HTMLFormElement): ContactFormValues {
 
 export function ContactForm({
   defaultValues,
+  groups,
+  defaultGroups = [],
   errors,
   formError,
   onSubmit,
   footer,
 }: {
-  defaultValues?: Partial<Record<ContactFieldName, string | null>>;
+  defaultValues?: Partial<Record<Exclude<ContactFieldName, "groups">, string | null>>;
+  /** All saved groups, to choose from */
+  groups: PickerGroup[];
+  /** The groups the contact is in when the form opens */
+  defaultGroups?: PickerGroup[];
   errors: FieldErrors<ContactFieldName>;
   formError?: string | null;
   onSubmit: (values: ContactFormValues) => void;
   footer: ReactNode;
 }) {
   const idPrefix = useId();
+  // Groups chosen or created here stay in the form until it is saved.
+  const [chosenGroups, setChosenGroups] = useState(defaultGroups);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    onSubmit(readContactForm(event.currentTarget));
+    onSubmit({ ...readContactForm(event.currentTarget), ...splitChosenGroups(chosenGroups) });
   }
 
   return (
@@ -134,6 +144,17 @@ export function ContactForm({
           defaultValue={defaultValues?.contactFrequency}
           error={errors.contactFrequency}
         />
+        <Field data-invalid={errors.groups ? true : undefined}>
+          <FieldLabel htmlFor={`${idPrefix}-groups`}>Группы</FieldLabel>
+          <ContactGroupsField
+            id={`${idPrefix}-groups`}
+            groups={groups}
+            value={chosenGroups}
+            onChange={setChosenGroups}
+            invalid={Boolean(errors.groups)}
+          />
+          <FieldError>{errors.groups}</FieldError>
+        </Field>
       </FieldGroup>
       {formError && (
         <p role="alert" className="text-sm text-destructive">

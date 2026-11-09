@@ -21,13 +21,18 @@ import type {
   ContactFormValues,
   FieldErrors,
 } from "@/lib/contacts/validation";
+import type { PickerGroup } from "@/lib/groups/picker";
 
 export function EditContactDialog({
   contactId,
   defaultValues,
+  groups,
+  contactGroups,
 }: {
   contactId: string;
-  defaultValues: Record<ContactFieldName, string | null>;
+  defaultValues: Record<Exclude<ContactFieldName, "groups">, string | null>;
+  groups: PickerGroup[];
+  contactGroups: PickerGroup[];
 }) {
   const [open, setOpen] = useState(false);
   const [errors, setErrors] = useState<FieldErrors<ContactFieldName>>({});
@@ -67,6 +72,8 @@ export function EditContactDialog({
         </DialogHeader>
         <ContactForm
           defaultValues={defaultValues}
+          groups={groups}
+          defaultGroups={contactGroups}
           errors={errors}
           formError={formError}
           onSubmit={handleSubmit}

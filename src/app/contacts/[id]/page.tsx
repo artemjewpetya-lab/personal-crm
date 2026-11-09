@@ -14,6 +14,7 @@ import { Fragment, Suspense, type ReactNode } from "react";
 import { AddNoteForm } from "@/components/add-note-form";
 import { ContactAvatar } from "@/components/contact-avatar";
 import { ContactFrequencyPicker } from "@/components/contact-frequency-picker";
+import { ContactGroupsPicker } from "@/components/contact-groups-picker";
 import { DeleteContactDialog } from "@/components/delete-contact-dialog";
 import { EditContactDialog } from "@/components/edit-contact-dialog";
 import { MarkContactedButton } from "@/components/mark-contacted-button";
@@ -21,6 +22,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getContact, listNotes } from "@/lib/contacts/queries";
+import { listContactGroups, listGroups } from "@/lib/groups/queries";
 import { formatDateParts, formatDateTime, phoneHref, pluralize } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -49,7 +51,12 @@ async function ContactDetails({
   params,
 }: Pick<PageProps<"/contacts/[id]">, "params">) {
   const { id } = await params;
-  const [contact, notes] = await Promise.all([getContact(id), listNotes(id)]);
+  const [contact, notes, contactGroups, allGroups] = await Promise.all([
+    getContact(id),
+    listNotes(id),
+    listContactGroups(id),
+    listGroups(),
+  ]);
   if (!contact) notFound();
 
   const addedOn = formatDateParts(contact.createdAt);
@@ -79,6 +86,13 @@ async function ContactDetails({
               {/* Without a frequency there is no period to start again */}
               {contact.contactFrequency && <MarkContactedButton contactId={contact.id} />}
             </div>
+            <div className="mt-2">
+              <ContactGroupsPicker
+                contactId={contact.id}
+                contactGroups={contactGroups}
+                allGroups={allGroups}
+              />
+            </div>
           </div>
           <div className="col-start-2 flex flex-wrap gap-2 sm:col-start-3">
             <EditContactDialog
@@ -91,6 +105,8 @@ async function ContactDetails({
                 email: contact.email,
                 contactFrequency: contact.contactFrequency,
               }}
+              groups={allGroups}
+              contactGroups={contactGroups}
             />
             <DeleteContactDialog
               contactId={contact.id}

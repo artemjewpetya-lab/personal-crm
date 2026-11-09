@@ -85,6 +85,10 @@ jobs:
       - name: Apply migrations
         run: pnpm db:migrate
 
+      # Same as the first local run (README): the main scenario expects a filled list.
+      - name: Seed test contacts
+        run: pnpm db:seed
+
       # Edge and Chrome are already installed on GitHub's Ubuntu runners.
       - name: Playwright
         run: pnpm test:e2e

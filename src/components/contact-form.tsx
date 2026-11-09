@@ -10,11 +10,7 @@ import { Select, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { isContactFrequency } from "@/lib/contacts/frequency";
 import type { PickerGroup } from "@/lib/groups/picker";
-import type {
-  ContactFieldName,
-  ContactFormValues,
-  FieldErrors,
-} from "@/lib/contacts/validation";
+import type { ContactFieldName, ContactFormValues, FieldErrors } from "@/lib/contacts/validation";
 
 type FieldConfig = {
   name: Exclude<ContactFieldName, "contactFrequency" | "groups">;
@@ -178,19 +174,12 @@ function FrequencyField({
   // Taken once, when the form opens. After saving, the card re-renders with the
   // new value while the dialog is still closing, and Select warns if its
   // starting value changes after it has started.
-  const [initialValue] = useState(() =>
-    isContactFrequency(defaultValue) ? defaultValue : null,
-  );
+  const [initialValue] = useState(() => (isContactFrequency(defaultValue) ? defaultValue : null));
 
   return (
     <Field data-invalid={error ? true : undefined}>
       <FieldLabel htmlFor={id}>Как часто общаться</FieldLabel>
-      <Select
-        id={id}
-        name="contactFrequency"
-        items={FREQUENCY_OPTIONS}
-        defaultValue={initialValue}
-      >
+      <Select id={id} name="contactFrequency" items={FREQUENCY_OPTIONS} defaultValue={initialValue}>
         <SelectTrigger
           aria-invalid={error ? true : undefined}
           className="h-10 w-full rounded-lg bg-card pr-3 pl-3.5 text-base data-popup-open:border-ring md:text-sm data-[size=default]:h-10"

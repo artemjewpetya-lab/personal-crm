@@ -51,9 +51,7 @@ async function readTotal(page: Page): Promise<number> {
   return Number((await summary.textContent())!.replace(/\D/g, ""));
 }
 
-test("groups: create a group, add a contact from the card, filter the list", async ({
-  page,
-}) => {
+test("groups: create a group, add a contact from the card, filter the list", async ({ page }) => {
   const contactId = await createContact(inGroupName);
   await createContact(outOfGroupName);
 

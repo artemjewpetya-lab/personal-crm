@@ -20,10 +20,7 @@ test.beforeAll(async () => {
     [contactName],
   );
   contactId = rows[0].id;
-  await pool.query("insert into notes (contact_id, body) values ($1, $2)", [
-    contactId,
-    noteText,
-  ]);
+  await pool.query("insert into notes (contact_id, body) values ($1, $2)", [contactId, noteText]);
 });
 
 test.afterAll(async () => {

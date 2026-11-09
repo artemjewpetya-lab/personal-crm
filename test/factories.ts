@@ -9,7 +9,10 @@ export async function givenContact(
   name: string,
   values: Partial<typeof contacts.$inferInsert> = {},
 ): Promise<string> {
-  const [row] = await db.insert(contacts).values({ name, ...values }).returning({ id: contacts.id });
+  const [row] = await db
+    .insert(contacts)
+    .values({ name, ...values })
+    .returning({ id: contacts.id });
   return row.id;
 }
 

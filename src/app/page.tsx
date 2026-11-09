@@ -2,16 +2,10 @@ import { SearchXIcon, UsersIcon } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 
-import {
-  AddContactButtonFallback,
-  AddContactDialog,
-} from "@/components/add-contact-dialog";
+import { AddContactButtonFallback, AddContactDialog } from "@/components/add-contact-dialog";
 import { ContactAvatar } from "@/components/contact-avatar";
 import { contactRowId } from "@/components/contact-row-reveal";
-import {
-  ContactSearch,
-  ContactSearchFallback,
-} from "@/components/contact-search";
+import { ContactSearch, ContactSearchFallback } from "@/components/contact-search";
 import { KeepInTouchList, type KeepInTouchItem } from "@/components/keep-in-touch-list";
 import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -72,9 +66,7 @@ async function ContactFilters() {
   return <ContactSearch groups={await listGroups()} />;
 }
 
-async function ContactList({
-  searchParams,
-}: Pick<PageProps<"/">, "searchParams">) {
+async function ContactList({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
   const { q, group } = await searchParams;
   const search = typeof q === "string" ? q.trim() : "";
   // "Пора связаться" is hidden while searching, so it is not even read then.
@@ -170,11 +162,7 @@ function ContactTable({ items }: { items: ContactListItem[] }) {
             <tr key={contact.id} id={contactRowId(contact.id)}>
               <td>
                 <div className="flex items-center gap-3">
-                  <ContactAvatar
-                    id={contact.id}
-                    name={contact.name}
-                    className="size-9 text-xs"
-                  />
+                  <ContactAvatar id={contact.id} name={contact.name} className="size-9 text-xs" />
                   <div className="min-w-0">
                     <Link
                       href={`/contacts/${contact.id}`}

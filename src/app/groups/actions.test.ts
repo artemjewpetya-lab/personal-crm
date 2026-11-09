@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import { db } from "@/db/client";
 import { contacts, notes } from "@/db/schema";
-import { givenContact, givenGroup, givenMembership, givenNote, groupNamesOf } from "../../../test/factories";
+import {
+  givenContact,
+  givenGroup,
+  givenMembership,
+  givenNote,
+  groupNamesOf,
+} from "../../../test/factories";
 import { listGroups } from "@/lib/groups/queries";
 
 import {
@@ -199,7 +205,10 @@ describe("addContactToGroup", () => {
 
     const result = await addContactToGroup(anna, MISSING_ID);
 
-    expect(result).toEqual({ ok: false, formError: "Группа не найдена — возможно, её уже удалили." });
+    expect(result).toEqual({
+      ok: false,
+      formError: "Группа не найдена — возможно, её уже удалили.",
+    });
     expect(await names()).toEqual([]);
   });
 

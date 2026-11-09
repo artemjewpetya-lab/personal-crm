@@ -31,9 +31,7 @@ test.afterAll(async () => {
   }
 });
 
-test("Ctrl+Enter pressed twice during a slow save adds the note once", async ({
-  page,
-}) => {
+test("Ctrl+Enter pressed twice during a slow save adds the note once", async ({ page }) => {
   await page.goto(`/contacts/${contactId}`);
 
   // Slow connection: every save takes 2 seconds to reach the server.

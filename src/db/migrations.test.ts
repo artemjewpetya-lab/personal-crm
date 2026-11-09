@@ -33,15 +33,18 @@ describe("migrations", () => {
 
   it("Контакты, добавленные до этой функции", async () => {
     await database.migrate({ upTo: LAST_MIGRATION_BEFORE_GROUPS });
-    const { rows: [anna] } = await database.pool.query<{ id: string }>(
+    const {
+      rows: [anna],
+    } = await database.pool.query<{ id: string }>(
       `insert into contacts (name, about, phone, email, contact_frequency, contact_frequency_set_at)
        values ('Анна', 'Коллега', '+7 900 123-45-67', 'anna@example.com', 'month', now())
        returning id`,
     );
     await database.pool.query("insert into contacts (name) values ('Борис')");
-    await database.pool.query("insert into notes (contact_id, body) values ($1, 'Договорились о встрече')", [
-      anna.id,
-    ]);
+    await database.pool.query(
+      "insert into notes (contact_id, body) values ($1, 'Договорились о встрече')",
+      [anna.id],
+    );
     const before = await snapshot(database);
 
     await database.migrate();
@@ -58,12 +61,18 @@ describe("migrations", () => {
 
     // The next version of the app brings one more migration.
     await database.migrate({
-      next: [{ tag: "0004_next_version", sql: 'create table "next_version_marker" ("id" integer);' }],
+      next: [
+        { tag: "0004_next_version", sql: 'create table "next_version_marker" ("id" integer);' },
+      ],
     });
 
-    const { rows: marker } = await database.pool.query("select to_regclass('next_version_marker') as name");
+    const { rows: marker } = await database.pool.query(
+      "select to_regclass('next_version_marker') as name",
+    );
     expect(marker[0].name).toBe("next_version_marker");
-    const { rows } = await database.pool.query<{ name: string }>("select name from groups order by name");
+    const { rows } = await database.pool.query<{ name: string }>(
+      "select name from groups order by name",
+    );
     expect(rows.map((row) => row.name)).toEqual(["Друзья", "Родные"]);
   });
 });

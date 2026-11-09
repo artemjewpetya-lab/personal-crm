@@ -7,11 +7,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
 
-import {
-  getTestDatabaseName,
-  getWorkingDatabaseUrl,
-  withDatabaseName,
-} from "./database-url";
+import { getTestDatabaseName, getWorkingDatabaseUrl, withDatabaseName } from "./database-url";
 
 const MIGRATIONS_FOLDER = path.resolve(process.cwd(), "drizzle");
 

@@ -6,12 +6,7 @@ import { contacts, groups } from "@/db/schema";
 import { listContactGroups, listGroups } from "@/lib/groups/queries";
 import type { ContactFormValues } from "@/lib/contacts/validation";
 
-import {
-  givenContact,
-  givenGroup,
-  givenMembership,
-  groupNamesOf,
-} from "../../../test/factories";
+import { givenContact, givenGroup, givenMembership, groupNamesOf } from "../../../test/factories";
 
 import { createContact, updateContact } from "./actions";
 
@@ -146,11 +141,17 @@ describe("updateContact with groups", () => {
     const anna = await givenContact("Анна");
     await givenMembership(anna, friends);
 
-    const result = await updateContact(anna, form({ groupIds: [friends], newGroupNames: ["Теннис"] }));
+    const result = await updateContact(
+      anna,
+      form({ groupIds: [friends], newGroupNames: ["Теннис"] }),
+    );
 
     expect(result.ok).toBe(true);
     expect(await groupNames()).toEqual(["Друзья", "Теннис"]);
-    expect((await listContactGroups(anna)).map((group) => group.name)).toEqual(["Друзья", "Теннис"]);
+    expect((await listContactGroups(anna)).map((group) => group.name)).toEqual([
+      "Друзья",
+      "Теннис",
+    ]);
   });
 
   it("Ошибка в названии новой группы", async () => {

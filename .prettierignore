@@ -1,0 +1,12 @@
+# Prettier also skips everything in .gitignore.
+
+# Written by tools, not by hand
+pnpm-lock.yaml
+drizzle/
+patches/
+
+# Texts and specs: formatted by hand
+*.md
+openspec/
+specs/
+.claude/

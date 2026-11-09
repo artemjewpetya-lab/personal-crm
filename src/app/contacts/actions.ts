@@ -172,9 +172,7 @@ export async function updateContactFrequency(
 }
 
 // The contact's notes are deleted with it (on delete cascade).
-export async function deleteContact(
-  id: string,
-): Promise<ActionResult<{ name: string }>> {
+export async function deleteContact(id: string): Promise<ActionResult<{ name: string }>> {
   if (!contactIdSchema.safeParse(id).success) {
     return { ok: false, formError: CONTACT_NOT_FOUND };
   }
@@ -212,9 +210,7 @@ export async function addNote(
 }
 
 /** "Связались": a regular note, so the period starts again from now. */
-export async function markContacted(
-  contactId: string,
-): Promise<ActionResult<{ id: string }>> {
+export async function markContacted(contactId: string): Promise<ActionResult<{ id: string }>> {
   if (!contactIdSchema.safeParse(contactId).success) {
     return { ok: false, formError: CONTACT_NOT_FOUND };
   }
@@ -262,10 +258,7 @@ export async function undoMarkContacted(
   }
 }
 
-async function insertNote(
-  contactId: string,
-  body: string,
-): Promise<ActionResult<{ id: string }>> {
+async function insertNote(contactId: string, body: string): Promise<ActionResult<{ id: string }>> {
   try {
     const [created] = await db
       .insert(notes)

@@ -32,12 +32,8 @@ export const contacts = pgTable(
     contactFrequencySetAt: timestamp("contact_frequency_set_at", {
       withTimezone: true,
     }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index("contacts_name_idx").on(table.name)],
 );
@@ -50,16 +46,9 @@ export const notes = pgTable(
       .notNull()
       .references(() => contacts.id, { onDelete: "cascade" }),
     body: text("body").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [
-    index("notes_contact_id_created_at_idx").on(
-      table.contactId,
-      table.createdAt,
-    ),
-  ],
+  (table) => [index("notes_contact_id_created_at_idx").on(table.contactId, table.createdAt)],
 );
 
 export const groups = pgTable(
@@ -67,19 +56,13 @@ export const groups = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     name: text("name").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     // Two names that differ only in letter case or "е"/"ё" are the same name.
     // The database checks it, so two simultaneous requests cannot create a twin.
-    uniqueIndex("groups_name_unique_idx").on(
-      sql`translate(lower(${table.name}), 'ё', 'е')`,
-    ),
+    uniqueIndex("groups_name_unique_idx").on(sql`translate(lower(${table.name}), 'ё', 'е')`),
   ],
 );
 

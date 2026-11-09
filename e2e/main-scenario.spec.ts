@@ -73,9 +73,7 @@ test("main scenario: list, add, find, note, another browser", async ({ page }) =
   try {
     const otherPage = await otherBrowser.newPage({ locale: "ru-RU" });
     await otherPage.goto(page.url());
-    await expect(
-      otherPage.getByRole("heading", { level: 1, name: contactName }),
-    ).toBeVisible();
+    await expect(otherPage.getByRole("heading", { level: 1, name: contactName })).toBeVisible();
     await expect(otherPage.getByText(noteText)).toBeVisible();
 
     await otherPage.goto(new URL("/", page.url()).href);

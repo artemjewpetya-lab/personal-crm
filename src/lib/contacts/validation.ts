@@ -65,25 +65,18 @@ export const noteIdSchema = z.uuid();
 export type ContactFormValues = z.input<typeof contactInputSchema>;
 // Both group inputs report their errors under one field: «Группы».
 export type ContactFieldName =
-  | Exclude<keyof ContactFormValues, "groupIds" | "newGroupNames">
-  | "groups";
+  Exclude<keyof ContactFormValues, "groupIds" | "newGroupNames"> | "groups";
 export type FieldErrors<Field extends string> = Partial<Record<Field, string>>;
 
 export type ActionResult<Data, Field extends string = never> =
-  | { ok: true; data: Data }
-  | { ok: false; fieldErrors?: FieldErrors<Field>; formError?: string };
+  { ok: true; data: Data } | { ok: false; fieldErrors?: FieldErrors<Field>; formError?: string };
 
-export function firstFieldErrors<Field extends string>(
-  error: z.ZodError,
-): FieldErrors<Field> {
+export function firstFieldErrors<Field extends string>(error: z.ZodError): FieldErrors<Field> {
   const { fieldErrors } = z.flattenError(error) as {
     fieldErrors: Partial<Record<Field, string[]>>;
   };
   const result: FieldErrors<Field> = {};
-  for (const [field, messages] of Object.entries(fieldErrors) as [
-    Field,
-    string[] | undefined,
-  ][]) {
+  for (const [field, messages] of Object.entries(fieldErrors) as [Field, string[] | undefined][]) {
     if (messages?.[0]) result[field] = messages[0];
   }
   return result;

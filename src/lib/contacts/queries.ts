@@ -30,10 +30,7 @@ import { groupIdSchema } from "@/lib/groups/validation";
 import { CONTACT_FREQUENCIES, CONTACT_FREQUENCY_DETAILS } from "./frequency";
 import { contactIdSchema } from "./validation";
 
-export type ContactListItem = Pick<
-  Contact,
-  "id" | "name" | "about" | "phone" | "email"
-> & {
+export type ContactListItem = Pick<Contact, "id" | "name" | "about" | "phone" | "email"> & {
   /** All groups of the contact by name, whatever group the list is filtered by */
   groups: Pick<Group, "id" | "name">[];
 };
@@ -85,9 +82,9 @@ export async function listContacts(
 
   const inGroup =
     groupId && groupIdSchema.safeParse(groupId).success
-      // A group that no longer exists filters nothing (the same as «Все группы»): the page
-      // can start reading the contacts without waiting to learn which groups exist.
-      ? sql`(not exists (select 1 from ${groups} where ${groups.id} = ${groupId})
+      ? // A group that no longer exists filters nothing (the same as «Все группы»): the page
+        // can start reading the contacts without waiting to learn which groups exist.
+        sql`(not exists (select 1 from ${groups} where ${groups.id} = ${groupId})
           or exists (select 1 from ${contactGroups} where ${contactGroups.contactId} = ${contactIdRef} and ${contactGroups.groupId} = ${groupId}))`
       : undefined;
 
@@ -123,11 +120,7 @@ export async function getContact(id: string): Promise<Contact | null> {
 
   if (!contactIdSchema.safeParse(id).success) return null;
 
-  const [contact] = await db
-    .select()
-    .from(contacts)
-    .where(eq(contacts.id, id))
-    .limit(1);
+  const [contact] = await db.select().from(contacts).where(eq(contacts.id, id)).limit(1);
   return contact ?? null;
 }
 
@@ -154,9 +147,10 @@ export async function listDueContacts(): Promise<DueContact[]> {
   const lastNote = db
     .select({
       createdAt: notes.createdAt,
-      snippet: sql<string>`left(substring(${notes.body} from ${"^[^\\r\\n]*"}), ${SNIPPET_LENGTH})`.as(
-        "snippet",
-      ),
+      snippet:
+        sql<string>`left(substring(${notes.body} from ${"^[^\\r\\n]*"}), ${SNIPPET_LENGTH})`.as(
+          "snippet",
+        ),
     })
     .from(notes)
     .where(eq(notes.contactId, contacts.id))

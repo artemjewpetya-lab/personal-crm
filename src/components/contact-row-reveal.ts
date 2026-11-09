@@ -23,10 +23,10 @@ export function revealContactRow(contactId: string): void {
       row.scrollIntoView({ block: "center", behavior: "smooth" });
       // The color is a design token from globals.css
       const highlight = getComputedStyle(row).getPropertyValue("--highlight");
-      row.animate(
-        [{ backgroundColor: highlight }, { backgroundColor: "transparent" }],
-        { duration: 2500, easing: "ease-out" },
-      );
+      row.animate([{ backgroundColor: highlight }, { backgroundColor: "transparent" }], {
+        duration: 2500,
+        easing: "ease-out",
+      });
       return;
     }
     if (performance.now() - startedAt < REVEAL_TIMEOUT_MS) {

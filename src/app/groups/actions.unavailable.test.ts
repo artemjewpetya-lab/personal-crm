@@ -42,7 +42,10 @@ describe("database unavailable", () => {
   it("Не удалось сохранить: отметка в карточке", async () => {
     await expectNoConnection();
 
-    expect(await addContactToGroup(GROUP_ID, GROUP_ID)).toEqual({ ok: false, formError: SAVE_FAILED });
+    expect(await addContactToGroup(GROUP_ID, GROUP_ID)).toEqual({
+      ok: false,
+      formError: SAVE_FAILED,
+    });
     expect(await removeContactFromGroup(GROUP_ID, GROUP_ID)).toEqual({
       ok: false,
       formError: SAVE_FAILED,

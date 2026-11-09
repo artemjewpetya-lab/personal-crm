@@ -22,9 +22,7 @@ test.afterAll(async () => {
   }
 });
 
-test("the list scrolls to a new contact even when the list arrives slowly", async ({
-  page,
-}) => {
+test("the list scrolls to a new contact even when the list arrives slowly", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByText(/^Всего \d/)).toBeVisible();
 

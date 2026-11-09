@@ -34,9 +34,7 @@ export function formatDate(date: Date): string {
 
 /** 24 -> "Просрочено на 24 дня"; less than a full day -> "Пора сегодня" */
 export function formatOverdue(days: number): string {
-  return days < 1
-    ? "Пора сегодня"
-    : `Просрочено на ${pluralize(days, ["день", "дня", "дней"])}`;
+  return days < 1 ? "Пора сегодня" : `Просрочено на ${pluralize(days, ["день", "дня", "дней"])}`;
 }
 
 /** 14 Oct 2026 -> { day: "14", rest: "октября 2026 г." }: the day is shown large, like on the landing */

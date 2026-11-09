@@ -24,12 +24,16 @@ const pool = new Pool({ connectionString: databaseUrl });
 
 // Drizzle records applied migrations in this table (created on the first run).
 async function countAppliedMigrations(): Promise<number> {
-  const { rows: [table] } = await pool.query<{ name: string | null }>(
+  const {
+    rows: [table],
+  } = await pool.query<{ name: string | null }>(
     "select to_regclass('drizzle.__drizzle_migrations')::text as name",
   );
   if (!table.name) return 0;
 
-  const { rows: [{ total }] } = await pool.query<{ total: number }>(
+  const {
+    rows: [{ total }],
+  } = await pool.query<{ total: number }>(
     "select count(*)::int as total from drizzle.__drizzle_migrations",
   );
   return total;
@@ -39,9 +43,7 @@ try {
   const before = await countAppliedMigrations();
   await migrate(drizzle(pool), { migrationsFolder });
   const after = await countAppliedMigrations();
-  console.log(
-    `Migrations applied: ${after - before} new, ${after} in total.`,
-  );
+  console.log(`Migrations applied: ${after - before} new, ${after} in total.`);
 } catch (error) {
   console.error("Migrations failed:", error);
   process.exitCode = 1;

@@ -10,7 +10,10 @@ describe("contact groups", () => {
       .insert(contacts)
       .values([{ name: "Анна" }, { name: "Борис" }])
       .returning({ id: contacts.id });
-    const [tennis] = await db.insert(groups).values({ name: "Теннис" }).returning({ id: groups.id });
+    const [tennis] = await db
+      .insert(groups)
+      .values({ name: "Теннис" })
+      .returning({ id: groups.id });
     await db.insert(contactGroups).values([
       { contactId: anna.id, groupId: tennis.id },
       { contactId: boris.id, groupId: tennis.id },
@@ -18,7 +21,10 @@ describe("contact groups", () => {
 
     await db.delete(contacts).where(eq(contacts.id, anna.id));
 
-    const remaining = await db.select().from(contactGroups).where(eq(contactGroups.groupId, tennis.id));
+    const remaining = await db
+      .select()
+      .from(contactGroups)
+      .where(eq(contactGroups.groupId, tennis.id));
     expect(remaining).toEqual([{ contactId: boris.id, groupId: tennis.id }]);
     expect(await db.select().from(groups)).toHaveLength(1);
   });

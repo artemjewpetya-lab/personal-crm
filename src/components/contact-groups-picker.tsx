@@ -157,10 +157,7 @@ export function ContactGroupsPicker({
           </>
         )}
       </ComboboxPrimitive.Trigger>
-      <ComboboxContent
-        align="start"
-        className="w-72 max-w-[calc(100vw-2.5rem)] rounded-2xl"
-      >
+      <ComboboxContent align="start" className="w-72 max-w-[calc(100vw-2.5rem)] rounded-2xl">
         <ComboboxInput
           showTrigger={false}
           placeholder="Найти или создать группу"

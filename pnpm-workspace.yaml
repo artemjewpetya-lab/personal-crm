@@ -3,4 +3,4 @@ allowBuilds:
   sharp: false
   unrs-resolver: false
 patchedDependencies:
-  '@tailwindcss/node@4.3.3': patches/@tailwindcss__node@4.3.3.patch
+  "@tailwindcss/node@4.3.3": patches/@tailwindcss__node@4.3.3.patch

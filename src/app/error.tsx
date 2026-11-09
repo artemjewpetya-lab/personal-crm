@@ -21,9 +21,9 @@ export default function ErrorPage({
       <TriangleAlertIcon aria-hidden className="size-8 text-destructive" />
       <h1 className="font-heading text-h2 font-semibold">Не удалось загрузить данные</h1>
       <p className="text-muted-foreground">
-        Чаще всего это значит, что база данных не запущена. Запустите Docker Desktop,
-        выполните в папке проекта <code className="rounded bg-muted px-1">docker compose up -d</code>{" "}
-        и попробуйте ещё раз.
+        Чаще всего это значит, что база данных не запущена. Запустите Docker Desktop, выполните в
+        папке проекта <code className="rounded bg-muted px-1">docker compose up -d</code> и
+        попробуйте ещё раз.
       </p>
       <Button onClick={() => retry()}>Попробовать ещё раз</Button>
     </main>

@@ -16,11 +16,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import type {
-  ContactFieldName,
-  ContactFormValues,
-  FieldErrors,
-} from "@/lib/contacts/validation";
+import type { ContactFieldName, ContactFormValues, FieldErrors } from "@/lib/contacts/validation";
 import type { PickerGroup } from "@/lib/groups/picker";
 
 export function EditContactDialog({
@@ -79,9 +75,7 @@ export function EditContactDialog({
           onSubmit={handleSubmit}
           footer={
             <DialogFooter>
-              <DialogClose render={<Button variant="outline" />}>
-                Отмена
-              </DialogClose>
+              <DialogClose render={<Button variant="outline" />}>Отмена</DialogClose>
               <Button type="submit" disabled={isPending}>
                 {isPending ? "Сохраняю…" : "Сохранить"}
               </Button>

@@ -15,10 +15,7 @@ export const metadata: Metadata = {
 export default function GroupsPage() {
   return (
     <main className="mx-auto w-full max-w-3xl px-5 pt-2 pb-12 lg:pt-4">
-      <Link
-        href="/"
-        className={buttonVariants({ variant: "ghost", className: "-ml-3.5 mb-3" })}
-      >
+      <Link href="/" className={buttonVariants({ variant: "ghost", className: "-ml-3.5 mb-3" })}>
         <ArrowLeftIcon data-icon="inline-start" />
         Все контакты
       </Link>

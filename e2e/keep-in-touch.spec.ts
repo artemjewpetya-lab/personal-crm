@@ -75,18 +75,14 @@ async function readContact(id: string) {
     contact_frequency: Frequency | null;
     contact_frequency_set_at: Date | null;
     phone: string | null;
-  }>(
-    "select contact_frequency, contact_frequency_set_at, phone from contacts where id = $1",
-    [id],
-  );
+  }>("select contact_frequency, contact_frequency_set_at, phone from contacts where id = $1", [id]);
   return rows[0];
 }
 
 async function contactIdByName(name: string): Promise<string> {
-  const { rows } = await pool.query<{ id: string }>(
-    "select id from contacts where name = $1",
-    [name],
-  );
+  const { rows } = await pool.query<{ id: string }>("select id from contacts where name = $1", [
+    name,
+  ]);
   expect(rows).toHaveLength(1);
   return rows[0].id;
 }
@@ -126,9 +122,7 @@ test.describe("frequency in the contact form", () => {
     expect(contact.contact_frequency_set_at).toBeNull();
   });
 
-  test("the frequency chosen when adding is saved and shown in the card", async ({
-    page,
-  }) => {
+  test("the frequency chosen when adding is saved and shown in the card", async ({ page }) => {
     const name = `Мария ${marker}`;
     await page.goto("/");
     await page.getByRole("button", { name: "Добавить контакт" }).click();
@@ -312,7 +306,9 @@ test.describe("the «Пора связаться» block", () => {
 
     await page.goto("/");
     const anyaRow = dueRow(page, anya);
-    const anyaMeta = anyaRow.getByText(/^Просрочено на .+ \(последняя заметка 15 января 1995 г\.\)$/);
+    const anyaMeta = anyaRow.getByText(
+      /^Просрочено на .+ \(последняя заметка 15 января 1995 г\.\)$/,
+    );
     await expect(anyaMeta).toBeVisible();
     expect(overdueDaysIn((await anyaMeta.textContent())!)).toBe(
       await fullDaysSince("1995-02-15T12:00:00Z"),
@@ -612,9 +608,7 @@ async function markContactedInCard(page: Page) {
 }
 
 test.describe("«Отменить» after «Связались»", () => {
-  test("in the block: the contact comes back to its place, the note is gone", async ({
-    page,
-  }) => {
+  test("in the block: the contact comes back to its place, the note is gone", async ({ page }) => {
     const anya = `Аня ${marker}`;
     const boris = `Борис ${marker}`;
     const id = await createOverdueContact(anya);
@@ -671,9 +665,7 @@ test.describe("«Отменить» after «Связались»", () => {
     expect(await countContactedNotes(id)).toBe(1);
   });
 
-  test("when the undo does not get through: an error message, the note stays", async ({
-    page,
-  }) => {
+  test("when the undo does not get through: an error message, the note stays", async ({ page }) => {
     const id = await createOverdueContact(`Дарья ${marker}`);
     await page.goto(`/contacts/${id}`);
     await markContactedInCard(page);

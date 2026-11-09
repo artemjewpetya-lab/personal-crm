@@ -33,10 +33,7 @@ export const metadata: Metadata = {
 export default function ContactPage({ params }: PageProps<"/contacts/[id]">) {
   return (
     <main className="mx-auto w-full max-w-3xl px-5 pt-2 pb-12 lg:pt-4">
-      <Link
-        href="/"
-        className={buttonVariants({ variant: "ghost", className: "-ml-3.5 mb-3" })}
-      >
+      <Link href="/" className={buttonVariants({ variant: "ghost", className: "-ml-3.5 mb-3" })}>
         <ArrowLeftIcon data-icon="inline-start" />
         Все контакты
       </Link>
@@ -47,9 +44,7 @@ export default function ContactPage({ params }: PageProps<"/contacts/[id]">) {
   );
 }
 
-async function ContactDetails({
-  params,
-}: Pick<PageProps<"/contacts/[id]">, "params">) {
+async function ContactDetails({ params }: Pick<PageProps<"/contacts/[id]">, "params">) {
   const { id } = await params;
   const [contact, notes, contactGroups, allGroups] = await Promise.all([
     getContact(id),
@@ -72,17 +67,10 @@ async function ContactDetails({
             className="size-12.5 text-lg lg:size-15 lg:text-xl"
           />
           <div>
-            <h1 className="font-heading text-h2 font-semibold break-words">
-              {contact.name}
-            </h1>
-            {contact.about && (
-              <p className="mt-1 text-muted-foreground">{contact.about}</p>
-            )}
+            <h1 className="font-heading text-h2 font-semibold break-words">{contact.name}</h1>
+            {contact.about && <p className="mt-1 text-muted-foreground">{contact.about}</p>}
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
-              <ContactFrequencyPicker
-                contactId={contact.id}
-                frequency={contact.contactFrequency}
-              />
+              <ContactFrequencyPicker contactId={contact.id} frequency={contact.contactFrequency} />
               {/* Without a frequency there is no period to start again */}
               {contact.contactFrequency && <MarkContactedButton contactId={contact.id} />}
             </div>
@@ -166,10 +154,7 @@ async function ContactDetails({
           <ol className="flex flex-col gap-2.5">
             {notes.map((note) => (
               // A speech bubble, like the "talked about" phrases on the landing
-              <li
-                key={note.id}
-                className="rounded-tile rounded-bl-bubble-tail bg-card px-5 py-4"
-              >
+              <li key={note.id} className="rounded-tile rounded-bl-bubble-tail bg-card px-5 py-4">
                 <time
                   dateTime={note.createdAt.toISOString()}
                   className="text-xs text-muted-foreground"

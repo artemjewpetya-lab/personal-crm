@@ -210,10 +210,7 @@ export async function createGroupForContact(
       const found = await findOrCreateGroup(tx, parsed.data);
 
       // A deleted contact fails here, and the transaction takes the new group back with it.
-      await tx
-        .insert(contactGroups)
-        .values({ contactId, groupId: found.id })
-        .onConflictDoNothing();
+      await tx.insert(contactGroups).values({ contactId, groupId: found.id }).onConflictDoNothing();
       return found;
     });
 

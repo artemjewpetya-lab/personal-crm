@@ -1,0 +1,121 @@
+# Checks on every pull request to main: lint, format, types, Vitest,
+# Playwright on a real Postgres, and the production image build.
+# Branch protection requires all three jobs to be green before a merge.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+# A new push to the same PR cancels the checks of the previous one.
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Lint, format, types
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      # pnpm version comes from "packageManager" in package.json.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          # Same Node as the image (see Dockerfile).
+          node-version: 24.22.0
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Format
+        run: pnpm format:check
+
+      - name: Types
+        run: pnpm typecheck
+
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      db:
+        image: postgres:18
+        env:
+          POSTGRES_USER: crm
+          POSTGRES_PASSWORD: crm
+          POSTGRES_DB: crm
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U crm -d crm"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # A throwaway database that lives only for this job.
+      DATABASE_URL: postgresql://crm:crm@localhost:5432/crm
+      NEXT_TELEMETRY_DISABLED: 1
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.22.0
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Vitest makes its own "crm_test" database and applies the migrations there.
+      - name: Vitest
+        run: pnpm test
+
+      # e2e runs the app on the "crm" database, so it needs the migrations first.
+      - name: Apply migrations
+        run: pnpm db:migrate
+
+      # Same as the first local run (README): the main scenario expects a filled list.
+      - name: Seed test contacts
+        run: pnpm db:seed
+
+      # Edge and Chrome are already installed on GitHub's Ubuntu runners.
+      - name: Playwright
+        run: pnpm test:e2e
+
+      - name: Keep Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  image:
+    name: Image build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      # Same build as the deploy, but the image is not pushed anywhere.
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          build-args: APP_VERSION=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

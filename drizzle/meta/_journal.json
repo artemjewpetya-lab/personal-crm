@@ -29,6 +29,20 @@
       "when": 1794237143921,
       "tag": "0003_preset_groups",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794331488948,
+      "tag": "0004_login_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794331518556,
+      "tag": "0005_assign_owner",
+      "breakpoints": true
     }
   ]
 }

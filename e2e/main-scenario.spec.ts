@@ -1,12 +1,16 @@
-import { chromium, expect, test, type Page } from "@playwright/test";
+import { chromium, type Page } from "@playwright/test";
 import { Pool } from "pg";
 
 import { getDatabaseUrl } from "../src/db/database-url";
 
+import { expect, test } from "./fixtures";
+import { OWNER_EMAIL } from "./owner";
+import { signIn } from "./sign-in";
+
 // Success criteria from specs/01-продуктовая-идея.md:
 // - open → the list shows all contacts
 // - add a contact → find it by name → add a note → the change is saved in the card
-// - open the same address in another browser → the same contacts
+// - open the same address in another browser (signing in under the same email) → the same contacts
 
 const runId = Date.now();
 // Starts with "Я", so it lands at the very end of the alphabetical list.
@@ -71,7 +75,13 @@ test("main scenario: list, add, find, note, another browser", async ({ page }) =
   // 5. The same address in another browser (Chrome) shows the same data.
   const otherBrowser = await chromium.launch({ channel: "chrome" });
   try {
-    const otherPage = await otherBrowser.newPage({ locale: "ru-RU" });
+    // A browser that has never seen the app: the sign-in saved for the tests is not given to it
+    const otherPage = await otherBrowser.newPage({
+      locale: "ru-RU",
+      storageState: { cookies: [], origins: [] },
+    });
+    // It has no sign-in yet, so it signs in under the same email first
+    await signIn(otherPage, OWNER_EMAIL);
     await otherPage.goto(page.url());
     await expect(otherPage.getByRole("heading", { level: 1, name: contactName })).toBeVisible();
     await expect(otherPage.getByText(noteText)).toBeVisible();

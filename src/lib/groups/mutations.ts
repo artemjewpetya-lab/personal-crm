@@ -11,16 +11,18 @@ import { normalizedGroupName } from "./sql";
 export type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
- * The group with this name, created if there is none. The unique index decides:
- * if another request made it a moment ago, that group is taken, not a twin.
+ * The group of this user with this name, created if there is none. The unique index decides:
+ * if another request made it a moment ago, that group is taken, not a twin. Groups of other
+ * users are never looked at: two users may have groups with the same name.
  */
 export async function findOrCreateGroup(
   tx: Transaction,
+  userId: string,
   name: string,
 ): Promise<{ id: string; name: string }> {
   const [inserted] = await tx
     .insert(groups)
-    .values({ name })
+    .values({ userId, name })
     .onConflictDoNothing()
     .returning({ id: groups.id, name: groups.name });
   if (inserted) return inserted;
@@ -28,19 +30,26 @@ export async function findOrCreateGroup(
   const [found] = await tx
     .select({ id: groups.id, name: groups.name })
     .from(groups)
-    .where(eq(normalizedGroupName(groups.name), normalizedGroupName(name)))
+    .where(
+      and(
+        eq(groups.userId, userId),
+        eq(normalizedGroupName(groups.name), normalizedGroupName(name)),
+      ),
+    )
     .limit(1);
   if (!found) throw new Error("The group disappeared right after it was found");
   return found;
 }
 
 /**
- * Makes the contact a member of exactly these groups: `groupIds` (those that
- * still exist; a group deleted in the meantime is skipped) and the groups with
- * `newGroupNames` (found or created). Extra links are removed, missing ones added.
+ * Makes the contact (one of this user's own) a member of exactly these groups: `groupIds`
+ * (those that still exist and are the user's own; a group deleted in the meantime, or somebody
+ * else's, is skipped) and the groups with `newGroupNames` (found or created). Extra links are
+ * removed, missing ones added.
  */
 export async function setContactGroups(
   tx: Transaction,
+  userId: string,
   contactId: string,
   groupIds: string[],
   newGroupNames: string[],
@@ -51,11 +60,11 @@ export async function setContactGroups(
     const existing = await tx
       .select({ id: groups.id })
       .from(groups)
-      .where(inArray(groups.id, groupIds));
+      .where(and(inArray(groups.id, groupIds), eq(groups.userId, userId)));
     for (const group of existing) wanted.add(group.id);
   }
   for (const name of newGroupNames) {
-    wanted.add((await findOrCreateGroup(tx, name)).id);
+    wanted.add((await findOrCreateGroup(tx, userId, name)).id);
   }
 
   const wantedIds = [...wanted];

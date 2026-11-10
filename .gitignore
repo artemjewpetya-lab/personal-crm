@@ -38,4 +38,6 @@ next-env.d.ts
 
 # playwright
 /test-results/
+# the owner's sign-in saved for the e2e tests
+/e2e/.auth/
 /playwright-report/

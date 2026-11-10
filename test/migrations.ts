@@ -5,11 +5,14 @@ import path from "node:path";
 
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { Pool } from "pg";
+import { Client, Pool } from "pg";
 
 import { getTestDatabaseName, getWorkingDatabaseUrl, withDatabaseName } from "./database-url";
 
 const MIGRATIONS_FOLDER = path.resolve(process.cwd(), "drizzle");
+
+/** The owner of existing data in tests that do not care who it is (OWNER_EMAIL in production). */
+export const TEST_OWNER_EMAIL = "owner@example.com";
 
 type Journal = {
   entries: { idx: number; version: string; when: number; tag: string; breakpoints: boolean }[];
@@ -18,8 +21,15 @@ type Journal = {
 export type TemporaryDatabase = {
   url: string;
   pool: Pool;
-  /** Applies migrations up to and including `upTo` (a file name without .sql); all of them without it. */
-  migrate(options?: { upTo?: string; next?: { tag: string; sql: string }[] }): Promise<void>;
+  /**
+   * Applies migrations up to and including `upTo` (a file name without .sql); all of them without it.
+   * `ownerEmail` plays OWNER_EMAIL: the same setting on the same single connection as scripts/migrate.mts.
+   */
+  migrate(options?: {
+    upTo?: string;
+    next?: { tag: string; sql: string }[];
+    ownerEmail?: string;
+  }): Promise<void>;
   drop(): Promise<void>;
 };
 
@@ -39,11 +49,18 @@ export async function createTemporaryDatabase(): Promise<TemporaryDatabase> {
   return {
     url,
     pool,
-    async migrate({ upTo, next = [] } = {}) {
+    async migrate({ upTo, next = [], ownerEmail } = {}) {
       const folder = await prepareMigrationsFolder(upTo, next);
+      // One connection: the setting below lives only as long as it does.
+      const client = new Client({ connectionString: url });
+      await client.connect();
       try {
-        await migrate(drizzle(pool), { migrationsFolder: folder });
+        if (ownerEmail !== undefined) {
+          await client.query("select set_config('app.owner_email', $1, false)", [ownerEmail]);
+        }
+        await migrate(drizzle(client), { migrationsFolder: folder });
       } finally {
+        await client.end();
         await rm(folder, { recursive: true, force: true });
       }
     },

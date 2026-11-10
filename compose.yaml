@@ -25,5 +25,15 @@ services:
       timeout: 5s
       retries: 10
 
+  # Mail catcher: sign-in emails sent by the app land here instead of going out.
+  # Read them at http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:v1.33.1
+    restart: unless-stopped
+    ports:
+      # Bind to localhost only: 1025 receives mail (SMTP), 8025 is the web page and API
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+
 volumes:
   pgdata:

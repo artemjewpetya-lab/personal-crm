@@ -3,6 +3,8 @@ import { Pool } from "pg";
 
 import { getDatabaseUrl } from "../src/db/database-url";
 
+import { OWNER_EMAIL, ownerIdSql } from "./owner";
+
 // Requirements: openspec/specs/contact-groups/spec.md
 // - a group is created on the «Группы» page, with 0 contacts
 // - a contact is added to a group from its card, the change is saved at once
@@ -30,8 +32,8 @@ test.afterAll(async () => {
 
 async function createContact(name: string): Promise<string> {
   const { rows } = await pool.query<{ id: string }>(
-    "insert into contacts (name) values ($1) returning id",
-    [name],
+    `insert into contacts (user_id, name) values (${ownerIdSql(2)}, $1) returning id`,
+    [name, OWNER_EMAIL],
   );
   return rows[0].id;
 }

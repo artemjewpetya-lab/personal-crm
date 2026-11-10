@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 
 import { db } from "@/db/client";
 import { isForeignKeyViolation, isUniqueViolation } from "@/db/errors";
-import { contactGroups, groups } from "@/db/schema";
+import { contactGroups, contacts, groups } from "@/db/schema";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { CONTACT_NOT_FOUND, DELETE_FAILED, SAVE_FAILED } from "@/lib/contacts/messages";
 import { contactIdSchema, type ActionResult } from "@/lib/contacts/validation";
 import { GROUP_NOT_FOUND, groupAlreadyExists } from "@/lib/groups/messages";
@@ -15,6 +16,22 @@ import { groupIdSchema, groupNameSchema } from "@/lib/groups/validation";
 
 type GroupFieldName = "name";
 
+async function ownsContact(userId: string, contactId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: contacts.id })
+    .from(contacts)
+    .where(and(eq(contacts.id, contactId), eq(contacts.userId, userId)));
+  return Boolean(row);
+}
+
+async function ownsGroup(userId: string, groupId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: groups.id })
+    .from(groups)
+    .where(and(eq(groups.id, groupId), eq(groups.userId, userId)));
+  return Boolean(row);
+}
+
 /**
  * A group shows up in every contact card and in the filter, so after a change
  * the whole app is refreshed, not a single page.
@@ -23,13 +40,21 @@ function revalidateGroups() {
   revalidatePath("/", "layout");
 }
 
-/** The group that already has this name (letter case and «ё» ignored), spelled as it is saved. */
-async function findGroupWithName(name: string, exceptId?: string): Promise<string | undefined> {
+/**
+ * The group of this user that already has this name (letter case and «ё» ignored), spelled as
+ * it is saved. Other users' groups do not count.
+ */
+async function findGroupWithName(
+  userId: string,
+  name: string,
+  exceptId?: string,
+): Promise<string | undefined> {
   const [existing] = await db
     .select({ name: groups.name })
     .from(groups)
     .where(
       and(
+        eq(groups.userId, userId),
         eq(normalizedGroupName(groups.name), normalizedGroupName(name)),
         exceptId ? ne(groups.id, exceptId) : undefined,
       ),
@@ -46,16 +71,19 @@ export async function createGroup(
     return { ok: false, fieldErrors: { name: parsed.error.issues[0].message } };
   }
 
+  // Outside the try on purpose: without a sign-in this redirects to the sign-in page.
+  const user = await getCurrentUser();
+
   try {
     // The unique index decides: of two simultaneous requests only one inserts.
     const [created] = await db
       .insert(groups)
-      .values({ name: parsed.data })
+      .values({ userId: user.id, name: parsed.data })
       .onConflictDoNothing()
       .returning({ id: groups.id, name: groups.name });
 
     if (!created) {
-      const existingName = await findGroupWithName(parsed.data);
+      const existingName = await findGroupWithName(user.id, parsed.data);
       return existingName
         ? { ok: false, fieldErrors: { name: groupAlreadyExists(existingName) } }
         : { ok: false, formError: SAVE_FAILED };
@@ -82,11 +110,13 @@ export async function renameGroup(
     return { ok: false, fieldErrors: { name: parsed.error.issues[0].message } };
   }
 
+  const user = await getCurrentUser();
+
   try {
     const [renamed] = await db
       .update(groups)
       .set({ name: parsed.data, updatedAt: sql`now()` })
-      .where(eq(groups.id, id))
+      .where(and(eq(groups.id, id), eq(groups.userId, user.id)))
       .returning({ id: groups.id });
 
     if (!renamed) return { ok: false, formError: GROUP_NOT_FOUND };
@@ -95,7 +125,7 @@ export async function renameGroup(
     return { ok: true, data: renamed };
   } catch (error) {
     if (isUniqueViolation(error)) {
-      const existingName = await findGroupWithName(parsed.data, id).catch(() => undefined);
+      const existingName = await findGroupWithName(user.id, parsed.data, id).catch(() => undefined);
       if (existingName) {
         return { ok: false, fieldErrors: { name: groupAlreadyExists(existingName) } };
       }
@@ -112,10 +142,12 @@ export async function deleteGroup(id: string): Promise<ActionResult<{ name: stri
     return { ok: false, formError: GROUP_NOT_FOUND };
   }
 
+  const user = await getCurrentUser();
+
   try {
     const [deleted] = await db
       .delete(groups)
-      .where(eq(groups.id, id))
+      .where(and(eq(groups.id, id), eq(groups.userId, user.id)))
       .returning({ name: groups.name });
 
     if (!deleted) return { ok: false, formError: GROUP_NOT_FOUND };
@@ -148,7 +180,17 @@ export async function addContactToGroup(
     return { ok: false, formError: GROUP_NOT_FOUND };
   }
 
+  const user = await getCurrentUser();
+
   try {
+    // Both must be the user's own; somebody else's is the same as a deleted one.
+    if (!(await ownsContact(user.id, contactId))) {
+      return { ok: false, formError: CONTACT_NOT_FOUND };
+    }
+    if (!(await ownsGroup(user.id, groupId))) {
+      return { ok: false, formError: GROUP_NOT_FOUND };
+    }
+
     await db.insert(contactGroups).values({ contactId, groupId }).onConflictDoNothing();
 
     revalidateContactGroups(contactId);
@@ -156,7 +198,7 @@ export async function addContactToGroup(
   } catch (error) {
     if (isForeignKeyViolation(error)) {
       // Either the group or the contact was deleted in another tab. Nothing is created.
-      const [group] = await db.select({ id: groups.id }).from(groups).where(eq(groups.id, groupId));
+      const group = await ownsGroup(user.id, groupId);
       return { ok: false, formError: group ? CONTACT_NOT_FOUND : GROUP_NOT_FOUND };
     }
     console.error("Failed to add contact to group", error);
@@ -175,10 +217,20 @@ export async function removeContactFromGroup(
     return { ok: false, formError: GROUP_NOT_FOUND };
   }
 
+  const user = await getCurrentUser();
+
   try {
+    // Only a link between the user's own contact and group can be removed.
     await db
       .delete(contactGroups)
-      .where(and(eq(contactGroups.contactId, contactId), eq(contactGroups.groupId, groupId)));
+      .where(
+        and(
+          eq(contactGroups.contactId, contactId),
+          eq(contactGroups.groupId, groupId),
+          sql`${contactGroups.contactId} in (select ${contacts.id} from ${contacts} where ${contacts.userId} = ${user.id})`,
+          sql`${contactGroups.groupId} in (select ${groups.id} from ${groups} where ${groups.userId} = ${user.id})`,
+        ),
+      );
 
     revalidateContactGroups(contactId);
     return { ok: true, data: null };
@@ -205,9 +257,16 @@ export async function createGroupForContact(
     return { ok: false, fieldErrors: { name: parsed.error.issues[0].message } };
   }
 
+  const user = await getCurrentUser();
+
   try {
+    // Somebody else's contact is the same as a deleted one: no group is created for it.
+    if (!(await ownsContact(user.id, contactId))) {
+      return { ok: false, formError: CONTACT_NOT_FOUND };
+    }
+
     const group = await db.transaction(async (tx) => {
-      const found = await findOrCreateGroup(tx, parsed.data);
+      const found = await findOrCreateGroup(tx, user.id, parsed.data);
 
       // A deleted contact fails here, and the transaction takes the new group back with it.
       await tx.insert(contactGroups).values({ contactId, groupId: found.id }).onConflictDoNothing();

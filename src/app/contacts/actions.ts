@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 
 import { db } from "@/db/client";
 import { contacts, notes } from "@/db/schema";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { setContactGroups } from "@/lib/groups/mutations";
 import type { ContactFrequency } from "@/lib/contacts/frequency";
 import {
@@ -65,6 +66,9 @@ export async function createContact(
   }
   const { groupIds, newGroupNames, ...fields } = parsed.data;
 
+  // Outside the try on purpose: without a sign-in this redirects to the sign-in page.
+  const user = await getCurrentUser();
+
   try {
     // The contact and its groups are saved together: all or nothing.
     const created = await db.transaction(async (tx) => {
@@ -72,11 +76,12 @@ export async function createContact(
         .insert(contacts)
         .values({
           ...fields,
+          userId: user.id,
           contactFrequencySetAt: fields.contactFrequency ? sql`now()` : null,
         })
         .returning({ id: contacts.id, name: contacts.name });
       if (groupIds || newGroupNames) {
-        await setContactGroups(tx, row.id, groupIds ?? [], newGroupNames ?? []);
+        await setContactGroups(tx, user.id, row.id, groupIds ?? [], newGroupNames ?? []);
       }
       return row;
     });
@@ -104,6 +109,8 @@ export async function updateContact(
   }
   const { groupIds, newGroupNames, ...fields } = parsed.data;
 
+  const user = await getCurrentUser();
+
   try {
     // The contact and its groups are saved together: all or nothing.
     const updated = await db.transaction(async (tx) => {
@@ -114,11 +121,12 @@ export async function updateContact(
           contactFrequencySetAt: frequencySetAtOnUpdate(fields.contactFrequency),
           updatedAt: sql`now()`,
         })
-        .where(eq(contacts.id, id))
+        // Somebody else's contact is found as little as a deleted one
+        .where(and(eq(contacts.id, id), eq(contacts.userId, user.id)))
         .returning({ id: contacts.id });
       // A deleted contact: no group is created for it.
       if (row && (groupIds || newGroupNames)) {
-        await setContactGroups(tx, row.id, groupIds ?? [], newGroupNames ?? []);
+        await setContactGroups(tx, user.id, row.id, groupIds ?? [], newGroupNames ?? []);
       }
       return row;
     });
@@ -149,6 +157,8 @@ export async function updateContactFrequency(
     return { ok: false, formError: parsed.error.issues[0]?.message ?? SAVE_FAILED };
   }
 
+  const user = await getCurrentUser();
+
   try {
     const [updated] = await db
       .update(contacts)
@@ -157,7 +167,7 @@ export async function updateContactFrequency(
         contactFrequencySetAt: frequencySetAtOnUpdate(parsed.data),
         updatedAt: sql`now()`,
       })
-      .where(eq(contacts.id, contactId))
+      .where(and(eq(contacts.id, contactId), eq(contacts.userId, user.id)))
       .returning({ id: contacts.id });
 
     if (!updated) return { ok: false, formError: CONTACT_NOT_FOUND };
@@ -177,10 +187,12 @@ export async function deleteContact(id: string): Promise<ActionResult<{ name: st
     return { ok: false, formError: CONTACT_NOT_FOUND };
   }
 
+  const user = await getCurrentUser();
+
   try {
     const [deleted] = await db
       .delete(contacts)
-      .where(eq(contacts.id, id))
+      .where(and(eq(contacts.id, id), eq(contacts.userId, user.id)))
       .returning({ name: contacts.name });
 
     if (!deleted) return { ok: false, formError: CONTACT_NOT_FOUND };
@@ -206,7 +218,8 @@ export async function addNote(
     return { ok: false, fieldErrors: firstFieldErrors(parsed.error) };
   }
 
-  return insertNote(contactId, parsed.data.body);
+  const user = await getCurrentUser();
+  return insertNote(user.id, contactId, parsed.data.body);
 }
 
 /** "Связались": a regular note, so the period starts again from now. */
@@ -215,7 +228,8 @@ export async function markContacted(contactId: string): Promise<ActionResult<{ i
     return { ok: false, formError: CONTACT_NOT_FOUND };
   }
 
-  return insertNote(contactId, CONTACTED_NOTE_BODY);
+  const user = await getCurrentUser();
+  return insertNote(user.id, contactId, CONTACTED_NOTE_BODY);
 }
 
 /**
@@ -233,6 +247,8 @@ export async function undoMarkContacted(
     return { ok: false, formError: UNDO_CONTACTED_FAILED };
   }
 
+  const user = await getCurrentUser();
+
   try {
     const [deleted] = await db
       .delete(notes)
@@ -240,6 +256,8 @@ export async function undoMarkContacted(
         and(
           eq(notes.id, noteId),
           eq(notes.contactId, contactId),
+          // Only a note of one of the user's own contacts
+          sql`${notes.contactId} in (select ${contacts.id} from ${contacts} where ${contacts.userId} = ${user.id})`,
           eq(notes.body, CONTACTED_NOTE_BODY),
           sql`${notes.createdAt} > now() - interval '1 minute'`,
         ),
@@ -258,12 +276,23 @@ export async function undoMarkContacted(
   }
 }
 
-async function insertNote(contactId: string, body: string): Promise<ActionResult<{ id: string }>> {
+/** Writes a note for one of the user's own contacts; somebody else's is the same as a deleted one. */
+async function insertNote(
+  userId: string,
+  contactId: string,
+  body: string,
+): Promise<ActionResult<{ id: string }>> {
   try {
-    const [created] = await db
-      .insert(notes)
-      .values({ contactId, body })
-      .returning({ id: notes.id });
+    // "insert ... select" in one statement: the note is written only if the contact is the
+    // user's own (and exists), with no gap between the check and the write.
+    const { rows } = await db.execute<{ id: string }>(
+      sql`insert into ${notes} (${sql.identifier(notes.contactId.name)}, ${sql.identifier(notes.body.name)})
+          select ${contacts.id}, ${body} from ${contacts}
+           where ${contacts.id} = ${contactId} and ${contacts.userId} = ${userId}
+          returning ${notes.id}`,
+    );
+    const created = rows[0];
+    if (!created) return { ok: false, formError: CONTACT_NOT_FOUND };
 
     // A new note starts the period again: the contact leaves "Пора связаться".
     revalidatePath("/");

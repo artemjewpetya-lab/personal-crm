@@ -2,7 +2,7 @@ import { expect, test } from "./fixtures";
 import { deleteTestUsers, requestLink, signIn } from "./sign-in";
 import { deleteMessagesTo, messagesTo } from "../test/mailpit";
 
-// Sign-in by a link from an email (openspec/changes/login). These tests start signed out.
+// Sign-in by a link from an email (openspec/specs/sign-in). These tests start signed out.
 test.use({ storageState: { cookies: [], origins: [] } });
 
 const runId = Date.now();

@@ -6,6 +6,7 @@ import { Suspense } from "react";
 import { GroupsManager } from "@/components/groups-manager";
 import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { listGroups } from "@/lib/groups/queries";
 
 export const metadata: Metadata = {
@@ -27,7 +28,8 @@ export default function GroupsPage() {
 }
 
 async function GroupsContent() {
-  return <GroupsManager groups={await listGroups()} />;
+  const user = await getCurrentUser();
+  return <GroupsManager groups={await listGroups(user.id)} />;
 }
 
 function GroupsSkeleton() {

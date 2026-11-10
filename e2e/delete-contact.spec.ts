@@ -3,6 +3,8 @@ import { Pool } from "pg";
 
 import { getDatabaseUrl } from "../src/db/database-url";
 
+import { OWNER_EMAIL, ownerIdSql } from "./owner";
+
 // Deleting a contact from its card: a confirmation first, then the contact
 // and its notes are gone for good, and the list opens.
 
@@ -16,8 +18,8 @@ let contactId: string;
 
 test.beforeAll(async () => {
   const { rows } = await pool.query<{ id: string }>(
-    "insert into contacts (name) values ($1) returning id",
-    [contactName],
+    `insert into contacts (user_id, name) values (${ownerIdSql(2)}, $1) returning id`,
+    [contactName, OWNER_EMAIL],
   );
   contactId = rows[0].id;
   await pool.query("insert into notes (contact_id, body) values ($1, $2)", [contactId, noteText]);

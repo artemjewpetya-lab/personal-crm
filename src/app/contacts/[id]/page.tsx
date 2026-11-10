@@ -21,6 +21,7 @@ import { MarkContactedButton } from "@/components/mark-contacted-button";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { getContact, listNotes } from "@/lib/contacts/queries";
 import { listContactGroups, listGroups } from "@/lib/groups/queries";
 import { formatDateParts, formatDateTime, phoneHref, pluralize } from "@/lib/format";
@@ -45,12 +46,12 @@ export default function ContactPage({ params }: PageProps<"/contacts/[id]">) {
 }
 
 async function ContactDetails({ params }: Pick<PageProps<"/contacts/[id]">, "params">) {
-  const { id } = await params;
+  const [user, { id }] = await Promise.all([getCurrentUser(), params]);
   const [contact, notes, contactGroups, allGroups] = await Promise.all([
-    getContact(id),
-    listNotes(id),
-    listContactGroups(id),
-    listGroups(),
+    getContact(user.id, id),
+    listNotes(user.id, id),
+    listContactGroups(user.id, id),
+    listGroups(user.id),
   ]);
   if (!contact) notFound();
 

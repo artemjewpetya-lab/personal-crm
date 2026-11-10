@@ -3,6 +3,8 @@ import { Pool } from "pg";
 
 import { getDatabaseUrl } from "../src/db/database-url";
 
+import { OWNER_EMAIL, ownerIdSql } from "./owner";
+
 // Requirements: openspec/changes/keep-in-touch/specs/keep-in-touch/spec.md
 // - a contact has a frequency, set in the contact form and shown in the card
 // - the due date counts from the last note, or from when the frequency was set
@@ -54,10 +56,10 @@ async function createContact({
 }): Promise<string> {
   const [setAt, setAgo] = momentParams(frequency ? (frequencySetAt ?? { ago: "0" }) : undefined);
   const { rows } = await pool.query<{ id: string }>(
-    `insert into contacts (name, contact_frequency, contact_frequency_set_at)
-     values ($1, $2, case when $2::contact_frequency is null then null else ${MOMENT_SQL(3, 4)} end)
+    `insert into contacts (user_id, name, contact_frequency, contact_frequency_set_at)
+     values (${ownerIdSql(5)}, $1, $2, case when $2::contact_frequency is null then null else ${MOMENT_SQL(3, 4)} end)
      returning id`,
-    [name, frequency, setAt, setAgo],
+    [name, frequency, setAt, setAgo, OWNER_EMAIL],
   );
   const id = rows[0].id;
   for (const note of notes) {

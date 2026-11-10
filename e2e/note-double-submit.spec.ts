@@ -3,6 +3,8 @@ import { Pool } from "pg";
 
 import { getDatabaseUrl } from "../src/db/database-url";
 
+import { OWNER_EMAIL, ownerIdSql } from "./owner";
+
 // Bug report: on a slow connection, pressing Ctrl+Enter twice while the first
 // save was still in progress saved the same note twice.
 
@@ -16,8 +18,8 @@ let contactId: string;
 
 test.beforeAll(async () => {
   const { rows } = await pool.query<{ id: string }>(
-    "insert into contacts (name) values ($1) returning id",
-    [contactName],
+    `insert into contacts (user_id, name) values (${ownerIdSql(2)}, $1) returning id`,
+    [contactName, OWNER_EMAIL],
   );
   contactId = rows[0].id;
 });

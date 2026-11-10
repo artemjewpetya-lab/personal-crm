@@ -1,12 +1,19 @@
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { db } from "@/db/client";
 import { contacts, groups } from "@/db/schema";
 import { listContactGroups, listGroups } from "@/lib/groups/queries";
 import type { ContactFormValues } from "@/lib/contacts/validation";
 
-import { givenContact, givenGroup, givenMembership, groupNamesOf } from "../../../test/factories";
+import {
+  givenContact,
+  givenGroup,
+  givenMembership,
+  givenUser,
+  groupNamesOf,
+} from "../../../test/factories";
+import { actAs } from "../../../test/current-user";
 
 import { createContact, updateContact } from "./actions";
 
@@ -30,20 +37,34 @@ async function created(values: ContactFormValues): Promise<string> {
   return result.data.id;
 }
 
-const groupNames = async () => (await listGroups()).map((group) => group.name);
+const groupNames = async () => (await listGroups(ownerId)).map((group) => group.name);
+
+// The actions run as the signed-in user; the test chooses who that is (test/current-user.ts).
+vi.mock("@/lib/auth/current-user", () => import("../../../test/current-user"));
+
+// Every test has one user who owns what the test creates.
+let ownerId: string;
+
+beforeEach(async () => {
+  ownerId = await givenUser("owner@example.com");
+  actAs({ id: ownerId, email: "owner@example.com" });
+});
 
 describe("createContact with groups", () => {
   it("Группы при добавлении", async () => {
-    const family = await givenGroup("Семья");
-    const friends = await givenGroup("Друзья");
+    const family = await givenGroup(ownerId, "Семья");
+    const friends = await givenGroup(ownerId, "Друзья");
 
     const id = await created(form({ groupIds: [family, friends] }));
 
-    expect((await listContactGroups(id)).map((group) => group.name)).toEqual(["Друзья", "Семья"]);
+    expect((await listContactGroups(ownerId, id)).map((group) => group.name)).toEqual([
+      "Друзья",
+      "Семья",
+    ]);
   });
 
   it("Без групп", async () => {
-    await givenGroup("Семья");
+    await givenGroup(ownerId, "Семья");
 
     const id = await created(form({ groupIds: [] }));
 
@@ -60,7 +81,7 @@ describe("createContact with groups", () => {
   });
 
   it("uses the existing group when a new name matches it", async () => {
-    await givenGroup("Семья");
+    await givenGroup(ownerId, "Семья");
 
     const id = await created(form({ newGroupNames: ["семья", "СЕМЬЯ"] }));
 
@@ -80,7 +101,7 @@ describe("createContact with groups", () => {
   });
 
   it("skips a selected group that was deleted in the meantime", async () => {
-    const family = await givenGroup("Семья");
+    const family = await givenGroup(ownerId, "Семья");
 
     const id = await created(form({ groupIds: [family, MISSING_ID] }));
 
@@ -90,23 +111,23 @@ describe("createContact with groups", () => {
 
 describe("updateContact with groups", () => {
   it("Текущие группы в форме «Изменить»", async () => {
-    const friends = await givenGroup("Друзья");
-    const tennis = await givenGroup("Теннис");
-    await givenGroup("Семья");
-    const anna = await givenContact("Анна");
+    const friends = await givenGroup(ownerId, "Друзья");
+    const tennis = await givenGroup(ownerId, "Теннис");
+    await givenGroup(ownerId, "Семья");
+    const anna = await givenContact(ownerId, "Анна");
     await givenMembership(anna, friends);
     await givenMembership(anna, tennis);
 
-    expect(await listContactGroups(anna)).toEqual([
+    expect(await listContactGroups(ownerId, anna)).toEqual([
       { id: friends, name: "Друзья" },
       { id: tennis, name: "Теннис" },
     ]);
   });
 
   it("Убрать группу в форме", async () => {
-    const friends = await givenGroup("Друзья");
-    const tennis = await givenGroup("Теннис");
-    const anna = await givenContact("Анна");
+    const friends = await givenGroup(ownerId, "Друзья");
+    const tennis = await givenGroup(ownerId, "Теннис");
+    const anna = await givenContact(ownerId, "Анна");
     await givenMembership(anna, friends);
     await givenMembership(anna, tennis);
 
@@ -117,8 +138,8 @@ describe("updateContact with groups", () => {
   });
 
   it("removes all groups when the form sends none", async () => {
-    const friends = await givenGroup("Друзья");
-    const anna = await givenContact("Анна");
+    const friends = await givenGroup(ownerId, "Друзья");
+    const anna = await givenContact(ownerId, "Анна");
     await givenMembership(anna, friends);
 
     await updateContact(anna, form({ groupIds: [] }));
@@ -127,8 +148,8 @@ describe("updateContact with groups", () => {
   });
 
   it("leaves the groups as they are when the form does not mention them", async () => {
-    const friends = await givenGroup("Друзья");
-    const anna = await givenContact("Анна");
+    const friends = await givenGroup(ownerId, "Друзья");
+    const anna = await givenContact(ownerId, "Анна");
     await givenMembership(anna, friends);
 
     await updateContact(anna, form());
@@ -137,8 +158,8 @@ describe("updateContact with groups", () => {
   });
 
   it("Новая группа из формы", async () => {
-    const friends = await givenGroup("Друзья");
-    const anna = await givenContact("Анна");
+    const friends = await givenGroup(ownerId, "Друзья");
+    const anna = await givenContact(ownerId, "Анна");
     await givenMembership(anna, friends);
 
     const result = await updateContact(
@@ -148,15 +169,15 @@ describe("updateContact with groups", () => {
 
     expect(result.ok).toBe(true);
     expect(await groupNames()).toEqual(["Друзья", "Теннис"]);
-    expect((await listContactGroups(anna)).map((group) => group.name)).toEqual([
+    expect((await listContactGroups(ownerId, anna)).map((group) => group.name)).toEqual([
       "Друзья",
       "Теннис",
     ]);
   });
 
   it("Ошибка в названии новой группы", async () => {
-    const friends = await givenGroup("Друзья");
-    const anna = await givenContact("Анна");
+    const friends = await givenGroup(ownerId, "Друзья");
+    const anna = await givenContact(ownerId, "Анна");
     await givenMembership(anna, friends);
 
     const result = await updateContact(

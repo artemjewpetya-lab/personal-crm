@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { db } from "@/db/client";
 import { contacts, notes } from "@/db/schema";
@@ -7,8 +7,10 @@ import {
   givenGroup,
   givenMembership,
   givenNote,
+  givenUser,
   groupNamesOf,
 } from "../../../test/factories";
+import { actAs } from "../../../test/current-user";
 import { listGroups } from "@/lib/groups/queries";
 
 import {
@@ -20,17 +22,28 @@ import {
   renameGroup,
 } from "./actions";
 
-const names = async () => (await listGroups()).map((group) => group.name);
+const names = async () => (await listGroups(ownerId)).map((group) => group.name);
+
+// The actions run as the signed-in user; the test chooses who that is (test/current-user.ts).
+vi.mock("@/lib/auth/current-user", () => import("../../../test/current-user"));
+
+// Every test has one user who owns what the test creates.
+let ownerId: string;
+
+beforeEach(async () => {
+  ownerId = await givenUser("owner@example.com");
+  actAs({ id: ownerId, email: "owner@example.com" });
+});
 
 describe("createGroup", () => {
   it("Создать пустую группу", async () => {
-    await givenGroup("Друзья");
-    await givenGroup("Семья");
+    await givenGroup(ownerId, "Друзья");
+    await givenGroup(ownerId, "Семья");
 
     const result = await createGroup("Аналитики");
 
     expect(result.ok).toBe(true);
-    const groups = await listGroups();
+    const groups = await listGroups(ownerId);
     expect(groups.map(({ name, contactCount }) => ({ name, contactCount }))).toEqual([
       { name: "Аналитики", contactCount: 0 },
       { name: "Друзья", contactCount: 0 },
@@ -61,7 +74,7 @@ describe("createGroup", () => {
   });
 
   it("Такая группа уже есть", async () => {
-    await givenGroup("Друзья");
+    await givenGroup(ownerId, "Друзья");
 
     const result = await createGroup("друзья");
 
@@ -79,20 +92,20 @@ describe("createGroup", () => {
 
 describe("renameGroup", () => {
   it("Переименовать", async () => {
-    const tennis = await givenGroup("Теннис");
-    const anna = await givenContact("Анна");
+    const tennis = await givenGroup(ownerId, "Теннис");
+    const anna = await givenContact(ownerId, "Анна");
     await givenMembership(anna, tennis);
 
     const result = await renameGroup(tennis, "Большой теннис");
 
     expect(result.ok).toBe(true);
-    const [group] = await listGroups();
+    const [group] = await listGroups(ownerId);
     expect(group).toMatchObject({ name: "Большой теннис", contactCount: 1 });
   });
 
   it("Такое название уже есть", async () => {
-    await givenGroup("Друзья");
-    const tennis = await givenGroup("Теннис");
+    await givenGroup(ownerId, "Друзья");
+    const tennis = await givenGroup(ownerId, "Теннис");
 
     const result = await renameGroup(tennis, "друзья");
 
@@ -101,8 +114,8 @@ describe("renameGroup", () => {
   });
 
   it("Такое название уже есть: «Ёлка» и «Елка» одно название", async () => {
-    await givenGroup("Елка");
-    const other = await givenGroup("Другая");
+    await givenGroup(ownerId, "Елка");
+    const other = await givenGroup(ownerId, "Другая");
 
     const result = await renameGroup(other, "Ёлка");
 
@@ -110,7 +123,7 @@ describe("renameGroup", () => {
   });
 
   it("Исправить большие и маленькие буквы", async () => {
-    const tennis = await givenGroup("теннис");
+    const tennis = await givenGroup(ownerId, "теннис");
 
     const result = await renameGroup(tennis, "Теннис");
 
@@ -119,7 +132,7 @@ describe("renameGroup", () => {
   });
 
   it("Пустое название", async () => {
-    const tennis = await givenGroup("Теннис");
+    const tennis = await givenGroup(ownerId, "Теннис");
 
     expect(await renameGroup(tennis, "  ")).toEqual({
       ok: false,
@@ -129,7 +142,7 @@ describe("renameGroup", () => {
   });
 
   it("Слишком длинное название", async () => {
-    const tennis = await givenGroup("Теннис");
+    const tennis = await givenGroup(ownerId, "Теннис");
 
     expect(await renameGroup(tennis, "а".repeat(51))).toEqual({
       ok: false,
@@ -151,9 +164,9 @@ describe("renameGroup", () => {
 
 describe("deleteGroup", () => {
   it("Удалить группу", async () => {
-    const friends = await givenGroup("Друзья");
-    const tennis = await givenGroup("Теннис");
-    const anna = await givenContact("Анна");
+    const friends = await givenGroup(ownerId, "Друзья");
+    const tennis = await givenGroup(ownerId, "Теннис");
+    const anna = await givenContact(ownerId, "Анна");
     await givenMembership(anna, friends);
     await givenMembership(anna, tennis);
     await givenNote(anna, "Договорились о матче");
@@ -182,8 +195,8 @@ const MISSING_ID = "7d1b6a52-4c53-4a56-9d0c-3a4b1f6d2e10";
 
 describe("addContactToGroup", () => {
   it("Добавить в группу из карточки", async () => {
-    const friends = await givenGroup("Друзья");
-    const anna = await givenContact("Анна");
+    const friends = await givenGroup(ownerId, "Друзья");
+    const anna = await givenContact(ownerId, "Анна");
 
     const result = await addContactToGroup(anna, friends);
 
@@ -192,8 +205,8 @@ describe("addContactToGroup", () => {
   });
 
   it("two quick marks of one group keep one link", async () => {
-    const friends = await givenGroup("Друзья");
-    const anna = await givenContact("Анна");
+    const friends = await givenGroup(ownerId, "Друзья");
+    const anna = await givenContact(ownerId, "Анна");
 
     await Promise.all([addContactToGroup(anna, friends), addContactToGroup(anna, friends)]);
 
@@ -201,7 +214,7 @@ describe("addContactToGroup", () => {
   });
 
   it("does not bring back a group deleted in another tab", async () => {
-    const anna = await givenContact("Анна");
+    const anna = await givenContact(ownerId, "Анна");
 
     const result = await addContactToGroup(anna, MISSING_ID);
 
@@ -213,7 +226,7 @@ describe("addContactToGroup", () => {
   });
 
   it("answers «Контакт не найден…» for a contact that is already deleted", async () => {
-    const friends = await givenGroup("Друзья");
+    const friends = await givenGroup(ownerId, "Друзья");
 
     const result = await addContactToGroup(MISSING_ID, friends);
 
@@ -226,9 +239,9 @@ describe("addContactToGroup", () => {
 
 describe("removeContactFromGroup", () => {
   it("Убрать из группы в карточке", async () => {
-    const friends = await givenGroup("Друзья");
-    const tennis = await givenGroup("Теннис");
-    const anna = await givenContact("Анна");
+    const friends = await givenGroup(ownerId, "Друзья");
+    const tennis = await givenGroup(ownerId, "Теннис");
+    const anna = await givenContact(ownerId, "Анна");
     await givenMembership(anna, friends);
     await givenMembership(anna, tennis);
 
@@ -239,8 +252,8 @@ describe("removeContactFromGroup", () => {
   });
 
   it("Убрать последнюю группу", async () => {
-    const friends = await givenGroup("Друзья");
-    const anna = await givenContact("Анна");
+    const friends = await givenGroup(ownerId, "Друзья");
+    const anna = await givenContact(ownerId, "Анна");
     await givenMembership(anna, friends);
 
     await removeContactFromGroup(anna, friends);
@@ -252,7 +265,7 @@ describe("removeContactFromGroup", () => {
 
 describe("createGroupForContact", () => {
   it("Создать группу из карточки", async () => {
-    const anna = await givenContact("Анна");
+    const anna = await givenContact(ownerId, "Анна");
 
     const result = await createGroupForContact(anna, "Теннис");
 
@@ -262,7 +275,7 @@ describe("createGroupForContact", () => {
   });
 
   it("Создать новую группу", async () => {
-    const anna = await givenContact("Анна");
+    const anna = await givenContact(ownerId, "Анна");
 
     await createGroupForContact(anna, " Теннис ");
 
@@ -270,8 +283,8 @@ describe("createGroupForContact", () => {
   });
 
   it("Группа с таким названием уже есть", async () => {
-    await givenGroup("Семья");
-    const anna = await givenContact("Анна");
+    await givenGroup(ownerId, "Семья");
+    const anna = await givenContact(ownerId, "Анна");
 
     const result = await createGroupForContact(anna, "семья");
 
@@ -281,7 +294,7 @@ describe("createGroupForContact", () => {
   });
 
   it("Слишком длинное название", async () => {
-    const anna = await givenContact("Анна");
+    const anna = await givenContact(ownerId, "Анна");
 
     const result = await createGroupForContact(anna, "а".repeat(51));
 

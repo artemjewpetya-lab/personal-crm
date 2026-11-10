@@ -3,7 +3,8 @@
 # POSTGRES_USER, POSTGRES_PASSWORD and POSTGRES_DB - the same names as in the
 # root .env.example. DATABASE_URL is built from them below, so the password
 # must be URL-safe: generate it with `openssl rand -hex 32`.
-# Do not run it by hand: deploy.sh sets APP_TAG (the image tag = commit SHA).
+# Do not run it by hand: deploy.sh and restore.sh set APP_TAG (the image tag =
+# commit SHA).
 
 x-logging: &logging
   driver: json-file

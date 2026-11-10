@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Runs in GitHub Actions after the image is pushed to GHCR: copies the server
-# files from deploy/ to the server and runs deploy.sh there.
+# Runs in GitHub Actions after the image is pushed to GHCR: copies the whole
+# deploy/ folder to the server (a new script there ships by itself) and runs
+# deploy.sh there.
 #
 # Env: DEPLOY_HOST, DEPLOY_USER, DEPLOY_KNOWN_HOSTS (repository variables),
 #      DEPLOY_SSH_KEY (secret), IMAGE_TAG, GHCR_USER, GHCR_TOKEN
@@ -26,9 +27,8 @@ ssh_opts=(
 )
 target="$DEPLOY_USER@$DEPLOY_HOST"
 
-echo "==> Copying deploy files to $REMOTE_DIR on the server"
-scp "${ssh_opts[@]}" "$script_dir/compose.yaml" "$script_dir/deploy.sh" \
-  "$target:$REMOTE_DIR/"
+echo "==> Copying deploy/ to $REMOTE_DIR on the server"
+scp "${ssh_opts[@]}" -r "$script_dir"/* "$target:$REMOTE_DIR/"
 
 echo "==> Running deploy.sh $IMAGE_TAG on the server"
 printf '%s\n' "$GHCR_TOKEN" \

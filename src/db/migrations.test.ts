@@ -6,6 +6,7 @@ import {
   type TemporaryDatabase,
 } from "../../test/migrations";
 
+const LAST_MIGRATION_BEFORE_FREQUENCY = "0000_init";
 const LAST_MIGRATION_BEFORE_GROUPS = "0001_contact_frequency";
 const LAST_MIGRATION_BEFORE_LOGIN = "0003_preset_groups";
 
@@ -62,6 +63,35 @@ describe("migrations", () => {
     // They have no groups, and they belong to the owner.
     expect(await countRows(database, "contacts")).toBe(2);
     expect(await rowsOutsideOwnerOf(database, "contacts", TEST_OWNER_EMAIL)).toBe(0);
+  });
+
+  it("Контакты, добавленные до частоты общения", async () => {
+    await database.migrate({ upTo: LAST_MIGRATION_BEFORE_FREQUENCY });
+    const {
+      rows: [anna],
+    } = await database.pool.query<{ id: string }>(
+      `insert into contacts (name, about, phone, email)
+       values ('Анна', 'Коллега', '+7 900 123-45-67', 'anna@example.com')
+       returning id`,
+    );
+    await database.pool.query("insert into contacts (name) values ('Борис')");
+    await database.pool.query(
+      "insert into notes (contact_id, body) values ($1, 'Договорились о встрече')",
+      [anna.id],
+    );
+    const before = await snapshot(database, { withGroups: false });
+
+    await database.migrate({ upTo: LAST_MIGRATION_BEFORE_GROUPS });
+
+    // Everything as it was, and every contact has «Не задано».
+    expect(await snapshot(database, { withGroups: false })).toEqual({
+      contacts: before.contacts.map((contact) => ({
+        ...contact,
+        contact_frequency: null,
+        contact_frequency_set_at: null,
+      })),
+      notes: before.notes,
+    });
   });
 
   it("Удалённая готовая группа не возвращается", async () => {

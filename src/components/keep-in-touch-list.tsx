@@ -7,6 +7,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { ContactAvatar } from "@/components/contact-avatar";
 import { MarkContactedButton } from "@/components/mark-contacted-button";
 import { Button } from "@/components/ui/button";
+import { DUE_VISIBLE_AT_FIRST, dueBlockView } from "@/lib/contacts/due-block";
 
 // Texts come ready from the server: dates are formatted there, the same way
 // as in the contact card, so the browser's time zone cannot change them.
@@ -21,19 +22,17 @@ export type KeepInTouchItem = {
   snippet: string | null;
 };
 
-const VISIBLE_AT_FIRST = 5;
-
 export function KeepInTouchList({ items }: { items: KeepInTouchItem[] }) {
   const headingId = useId();
   const listRef = useRef<HTMLUListElement>(null);
   const [expanded, setExpanded] = useState(false);
-  const visible = expanded ? items : items.slice(0, VISIBLE_AT_FIRST);
+  const { visible, showAll } = dueBlockView(items, expanded);
 
   // The button disappears once pressed: move focus to the first revealed
   // contact, so keyboard users continue from where the list grew.
   useEffect(() => {
     if (!expanded) return;
-    listRef.current?.querySelectorAll("a")[VISIBLE_AT_FIRST]?.focus();
+    listRef.current?.querySelectorAll("a")[DUE_VISIBLE_AT_FIRST]?.focus();
   }, [expanded]);
 
   return (
@@ -51,14 +50,14 @@ export function KeepInTouchList({ items }: { items: KeepInTouchItem[] }) {
           <KeepInTouchRow key={item.id} item={item} />
         ))}
       </ul>
-      {!expanded && items.length > VISIBLE_AT_FIRST && (
+      {showAll && (
         <div className="border-t px-2.5 pt-2 pb-2.5">
           <Button
             variant="ghost"
             className="h-11 px-3.5 text-primary hover:text-primary"
             onClick={() => setExpanded(true)}
           >
-            Показать всех ({items.length})
+            {showAll}
             <ChevronDownIcon data-icon="inline-end" />
           </Button>
         </div>

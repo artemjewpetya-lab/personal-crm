@@ -4,18 +4,21 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/db/client";
 import { contacts, groups } from "@/db/schema";
 import { listContactGroups, listGroups } from "@/lib/groups/queries";
+import { listDueContacts } from "@/lib/contacts/queries";
 import type { ContactFormValues } from "@/lib/contacts/validation";
 
 import {
+  ago,
   givenContact,
   givenGroup,
   givenMembership,
+  givenNote,
   givenUser,
   groupNamesOf,
 } from "../../../test/factories";
 import { actAs } from "../../../test/current-user";
 
-import { createContact, updateContact } from "./actions";
+import { createContact, updateContact, updateContactFrequency } from "./actions";
 
 const MISSING_ID = "7d1b6a52-4c53-4a56-9d0c-3a4b1f6d2e10";
 
@@ -196,5 +199,53 @@ describe("updateContact with groups", () => {
 
     expect(result.ok).toBe(false);
     expect(await groupNames()).toEqual([]);
+  });
+});
+
+describe("frequency and the due date", () => {
+  const dueNames = async () => (await listDueContacts(ownerId)).map((contact) => contact.name);
+
+  /** «Раз в год», the last note two months ago: not due yet. */
+  async function givenYearlyContactWithOldNote(): Promise<string> {
+    const id = await givenContact(ownerId, "Анна", {
+      contactFrequency: "year",
+      contactFrequencySetAt: new Date("2020-01-01T00:00:00Z"),
+    });
+    await givenNote(id, "Обсудили переезд", ago("2 months"));
+    expect(await dueNames()).toEqual([]);
+    return id;
+  }
+
+  it("Есть заметки, частоту сменили: in the form, the period counts from the last note", async () => {
+    const id = await givenYearlyContactWithOldNote();
+
+    const result = await updateContact(id, form({ contactFrequency: "month" }));
+
+    expect(result.ok).toBe(true);
+    expect(await dueNames()).toEqual(["Анна"]);
+  });
+
+  it("Есть заметки, частоту сменили: in the card, the period counts from the last note", async () => {
+    const id = await givenYearlyContactWithOldNote();
+
+    const result = await updateContactFrequency(id, "month");
+
+    expect(result.ok).toBe(true);
+    expect(await dueNames()).toEqual(["Анна"]);
+  });
+
+  it("Частоту убрали: the contact leaves «Пора связаться»", async () => {
+    const id = await givenContact(ownerId, "Анна", {
+      contactFrequency: "month",
+      contactFrequencySetAt: new Date("2020-01-01T00:00:00Z"),
+    });
+    expect(await dueNames()).toEqual(["Анна"]);
+
+    const result = await updateContact(id, form({ contactFrequency: "" }));
+
+    expect(result.ok).toBe(true);
+    const [saved] = await db.select().from(contacts).where(eq(contacts.id, id));
+    expect(saved.contactFrequency).toBeNull();
+    expect(await dueNames()).toEqual([]);
   });
 });

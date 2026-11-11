@@ -3,7 +3,14 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/db/client";
 import { contacts } from "@/db/schema";
 
-import { givenContact, givenGroup, givenMembership, givenUser } from "../../../test/factories";
+import {
+  ago,
+  givenContact,
+  givenGroup,
+  givenMembership,
+  givenNote,
+  givenUser,
+} from "../../../test/factories";
 
 import { listContacts, listDueContacts } from "./queries";
 
@@ -133,5 +140,52 @@ describe("listDueContacts", () => {
 
     expect(names(due)).toEqual(["Аня"]);
     expect(await db.select().from(contacts)).toHaveLength(2);
+  });
+
+  it("Срок ещё не прошёл: an hour before the period runs out the contact is not due", async () => {
+    // An hour past the week: due. An hour short of it: not yet.
+    const hourPast = await givenContact(ownerId, "Аня", { contactFrequency: "week" });
+    await givenNote(hourPast, "Созвонились", ago("7 days 1 hour"));
+    const hourShort = await givenContact(ownerId, "Борис", { contactFrequency: "week" });
+    await givenNote(hourShort, "Созвонились", ago("6 days 23 hours"));
+
+    expect(names(await listDueContacts(ownerId))).toEqual(["Аня"]);
+  });
+
+  it("Пора связаться не с кем", async () => {
+    const recent = await givenContact(ownerId, "Аня", { contactFrequency: "week" });
+    await givenNote(recent, "Созвонились", ago("6 days"));
+    await givenContact(ownerId, "Борис", {
+      contactFrequency: "month",
+      contactFrequencySetAt: new Date(),
+    });
+    const notSet = await givenContact(ownerId, "Вера");
+    await givenNote(notSet, "Давняя заметка", new Date("2020-01-01T00:00:00Z"));
+
+    expect(await listDueContacts(ownerId)).toEqual([]);
+  });
+
+  it("puts contacts whose period ran out at the same moment by name", async () => {
+    const setAt = new Date("2020-01-01T00:00:00Z");
+    await givenContact(ownerId, "Вера", { contactFrequency: "week", contactFrequencySetAt: setAt });
+    await givenContact(ownerId, "Аня", { contactFrequency: "week", contactFrequencySetAt: setAt });
+    await givenContact(ownerId, "Борис", {
+      contactFrequency: "week",
+      contactFrequencySetAt: setAt,
+    });
+
+    expect(names(await listDueContacts(ownerId))).toEqual(["Аня", "Борис", "Вера"]);
+  });
+
+  it("Список контактов не меняется", async () => {
+    await givenContact(ownerId, "Анна");
+    await givenContact(ownerId, "Борис", {
+      contactFrequency: "week",
+      contactFrequencySetAt: new Date("2020-01-01T00:00:00Z"),
+    });
+    await givenContact(ownerId, "Вера");
+
+    expect(names(await listDueContacts(ownerId))).toEqual(["Борис"]);
+    expect(names(await listContacts(ownerId, ""))).toEqual(["Анна", "Борис", "Вера"]);
   });
 });

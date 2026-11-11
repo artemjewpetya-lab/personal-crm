@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql, type SQL } from "drizzle-orm";
 
 import { db } from "@/db/client";
 import { contactGroups, contacts, groups, notes, users } from "@/db/schema";
@@ -35,8 +35,18 @@ export async function givenMembership(contactId: string, groupId: string): Promi
   await db.insert(contactGroups).values({ contactId, groupId });
 }
 
-export async function givenNote(contactId: string, body: string): Promise<void> {
-  await db.insert(notes).values({ contactId, body });
+/** A moment by the database clock, `interval` back from now: ago("7 days 1 hour"). */
+export function ago(interval: string): SQL {
+  return sql`now() - ${interval}::interval`;
+}
+
+/** A note written now, or at `createdAt` (a date, or a moment from `ago`). */
+export async function givenNote(
+  contactId: string,
+  body: string,
+  createdAt?: Date | SQL,
+): Promise<void> {
+  await db.insert(notes).values({ contactId, body, createdAt });
 }
 
 /** Names of the groups a contact is in, read straight from the tables (no sorting). */

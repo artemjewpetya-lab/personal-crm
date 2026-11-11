@@ -7,7 +7,7 @@ import { SAVE_FAILED } from "@/lib/contacts/messages";
 
 import { actAs } from "../../../test/current-user";
 
-import { addNote } from "./actions";
+import { addNote, updateContactFrequency } from "./actions";
 
 // Somebody is signed in; what fails here is the database behind the action.
 vi.mock("@/lib/auth/current-user", () => import("../../../test/current-user"));
@@ -25,6 +25,14 @@ describe("database unavailable", () => {
     await expectNoConnection();
 
     const result = await addNote(CONTACT_ID, { body: "Позвонил" });
+
+    expect(result).toEqual({ ok: false, formError: SAVE_FAILED });
+  });
+
+  it("updateContactFrequency answers with «Не удалось сохранить…»", async () => {
+    await expectNoConnection();
+
+    const result = await updateContactFrequency(CONTACT_ID, "week");
 
     expect(result).toEqual({ ok: false, formError: SAVE_FAILED });
   });

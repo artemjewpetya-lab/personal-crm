@@ -2,7 +2,7 @@ import path from "node:path";
 
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { Pool } from "pg";
+import { Client, Pool } from "pg";
 
 import {
   DATABASE_NOT_RUNNING,
@@ -10,6 +10,7 @@ import {
   getWorkingDatabaseUrl,
   withDatabaseName,
 } from "./database-url";
+import { TEST_OWNER_EMAIL } from "./migrations";
 
 function quoteIdentifier(name: string): string {
   return `"${name.replaceAll('"', '""')}"`;
@@ -40,13 +41,17 @@ export default async function setup() {
     await admin.end();
   }
 
-  const pool = new Pool({ connectionString: withDatabaseName(workingUrl, testName) });
+  // One connection: the owner setting for migration 0005 lives only as long as it does
+  // (scripts/migrate.mts does the same with OWNER_EMAIL).
+  const client = new Client({ connectionString: withDatabaseName(workingUrl, testName) });
+  await client.connect();
   try {
-    await migrate(drizzle(pool), {
+    await client.query("select set_config('app.owner_email', $1, false)", [TEST_OWNER_EMAIL]);
+    await migrate(drizzle(client), {
       migrationsFolder: path.resolve(process.cwd(), "drizzle"),
     });
   } finally {
-    await pool.end();
+    await client.end();
   }
 }
 

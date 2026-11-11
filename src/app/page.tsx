@@ -16,6 +16,7 @@ import {
   type ContactListItem,
   type DueContact,
 } from "@/lib/contacts/queries";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { formatDate, formatOverdue, pluralize } from "@/lib/format";
 import { resolveGroupFilter } from "@/lib/groups/filter";
 import { listGroups } from "@/lib/groups/queries";
@@ -58,24 +59,27 @@ export default function ContactsPage({ searchParams }: PageProps<"/">) {
 }
 
 // The groups are read here, inside Suspense, so the page shell does not wait for them.
+// Everything below asks who is signed in first: the id of the person decides what is read.
 async function AddContact() {
-  return <AddContactDialog groups={await listGroups()} />;
+  const user = await getCurrentUser();
+  return <AddContactDialog groups={await listGroups(user.id)} />;
 }
 
 async function ContactFilters() {
-  return <ContactSearch groups={await listGroups()} />;
+  const user = await getCurrentUser();
+  return <ContactSearch groups={await listGroups(user.id)} />;
 }
 
 async function ContactList({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
-  const { q, group } = await searchParams;
+  const [user, { q, group }] = await Promise.all([getCurrentUser(), searchParams]);
   const search = typeof q === "string" ? q.trim() : "";
   // "Пора связаться" is hidden while searching, so it is not even read then.
   // The group filter does not touch it. A group that does not exist filters nothing.
   const [items, total, due, groups] = await Promise.all([
-    listContacts(search, typeof group === "string" ? group : null),
-    countContacts(),
-    search ? [] : listDueContacts(),
-    listGroups(),
+    listContacts(user.id, search, typeof group === "string" ? group : null),
+    countContacts(user.id),
+    search ? [] : listDueContacts(user.id),
+    listGroups(user.id),
   ]);
   const groupId = resolveGroupFilter(group, groups);
   const groupName = groups.find((item) => item.id === groupId)?.name ?? null;

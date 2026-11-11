@@ -61,10 +61,30 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      # Mail catcher: sign-in emails land here, the tests read them through its API.
+      mailpit:
+        image: axllent/mailpit:v1.33.1
+        ports:
+          - 1025:1025
+          - 8025:8025
+        options: >-
+          --health-cmd "/mailpit readyz"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       # A throwaway database that lives only for this job.
       DATABASE_URL: postgresql://crm:crm@localhost:5432/crm
       NEXT_TELEMETRY_DISABLED: 1
+      # Sign-in settings. None of these is a secret: the database and the mail
+      # catcher live only for this job.
+      BETTER_AUTH_SECRET: ci-only-secret-not-used-anywhere-else-0123456789
+      BETTER_AUTH_URL: http://localhost:3000
+      SMTP_HOST: localhost
+      SMTP_PORT: 1025
+      MAIL_FROM_ADDRESS: noreply@example.com
+      OWNER_EMAIL: owner@example.com
+      MAILPIT_URL: http://localhost:8025
     steps:
       - uses: actions/checkout@v7
 

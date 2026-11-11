@@ -1,7 +1,11 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { Pool } from "pg";
 
 import { getDatabaseUrl } from "../src/db/database-url";
+
+import { expect, test } from "./fixtures";
+import { OWNER_EMAIL, ownerIdSql } from "./owner";
+import { signIn } from "./sign-in";
 
 // Requirements: openspec/specs/keep-in-touch/spec.md
 // - a contact has a frequency, set in the contact form and shown in the card
@@ -54,10 +58,10 @@ async function createContact({
 }): Promise<string> {
   const [setAt, setAgo] = momentParams(frequency ? (frequencySetAt ?? { ago: "0" }) : undefined);
   const { rows } = await pool.query<{ id: string }>(
-    `insert into contacts (name, contact_frequency, contact_frequency_set_at)
-     values ($1, $2, case when $2::contact_frequency is null then null else ${MOMENT_SQL(3, 4)} end)
+    `insert into contacts (user_id, name, contact_frequency, contact_frequency_set_at)
+     values (${ownerIdSql(5)}, $1, $2, case when $2::contact_frequency is null then null else ${MOMENT_SQL(3, 4)} end)
      returning id`,
-    [name, frequency, setAt, setAgo],
+    [name, frequency, setAt, setAgo, OWNER_EMAIL],
   );
   const id = rows[0].id;
   for (const note of notes) {
@@ -763,10 +767,16 @@ test.describe("frequency from the contact card", () => {
     await pickFrequencyInCard(page, "Раз в месяц");
     await expect.poll(async () => (await readContact(id)).contact_frequency).toBe("month");
 
-    // Another browser: nothing shared with the first one but the site.
-    const other = await browser.newContext({ baseURL, locale });
+    // Another browser: nothing shared with the first one but the site, not even the sign-in.
+    const other = await browser.newContext({
+      baseURL,
+      locale,
+      storageState: { cookies: [], origins: [] },
+    });
     try {
       const otherPage = await other.newPage();
+      // It has no sign-in yet, so it signs in under the same email first.
+      await signIn(otherPage, OWNER_EMAIL);
       await otherPage.goto(`/contacts/${id}`);
       await expect(frequencyPicker(otherPage)).toContainText("Общаемся раз в месяц");
 

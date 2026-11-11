@@ -21,9 +21,14 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 # public/ is empty for now and git does not keep empty folders, so make sure it exists.
 RUN mkdir -p public
-# The database client reads DATABASE_URL when its module loads, and the build
-# loads every route. Nothing connects during the build, so a placeholder is enough.
-RUN DATABASE_URL=postgresql://build:build@build-placeholder:5432/build pnpm build
+# The database client reads DATABASE_URL when its module loads, and the sign-in setup reads
+# BETTER_AUTH_SECRET and BETTER_AUTH_URL; the build loads every route. Nothing connects or
+# signs anything during the build, so placeholders are enough. The real values come when
+# the container starts (deploy/compose.yaml).
+RUN DATABASE_URL=postgresql://build:build@build-placeholder:5432/build \
+    BETTER_AUTH_SECRET=build-placeholder-secret-only-for-the-image-build \
+    BETTER_AUTH_URL=http://localhost:3000 \
+    pnpm build
 
 # Next.js bundles drizzle-orm into the app, so the standalone output has no copy
 # of it, but the migration script imports it. Take the version from the lockfile.

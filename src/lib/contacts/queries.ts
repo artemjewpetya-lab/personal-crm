@@ -6,6 +6,7 @@ import {
   count,
   desc,
   eq,
+  getTableColumns,
   isNotNull,
   or,
   sql,
@@ -74,6 +75,7 @@ function searchCondition(search: string): SQL | undefined {
 const contactIdRef = sql`"contacts"."id"`;
 
 export async function listContacts(
+  userId: string,
   search: string,
   groupId?: string | null,
 ): Promise<ContactListItem[]> {
@@ -82,9 +84,10 @@ export async function listContacts(
 
   const inGroup =
     groupId && groupIdSchema.safeParse(groupId).success
-      ? // A group that no longer exists filters nothing (the same as «Все группы»): the page
-        // can start reading the contacts without waiting to learn which groups exist.
-        sql`(not exists (select 1 from ${groups} where ${groups.id} = ${groupId})
+      ? // A group that no longer exists, or belongs to somebody else, filters nothing (the same
+        // as «Все группы»): the page can start reading the contacts without waiting to learn
+        // which groups exist.
+        sql`(not exists (select 1 from ${groups} where ${groups.id} = ${groupId} and ${groups.userId} = ${userId})
           or exists (select 1 from ${contactGroups} where ${contactGroups.contactId} = ${contactIdRef} and ${contactGroups.groupId} = ${groupId}))`
       : undefined;
 
@@ -100,27 +103,35 @@ export async function listContacts(
                 order by ${normalizedGroupName(groups.name)}, ${groups.name})
            from ${contactGroups}
            inner join ${groups} on ${groups.id} = ${contactGroups.groupId}
-          where ${contactGroups.contactId} = ${contactIdRef}),
+          where ${contactGroups.contactId} = ${contactIdRef} and ${groups.userId} = ${userId}),
         '[]'::json)`,
     })
     .from(contacts)
-    .where(and(search ? searchCondition(search) : undefined, inGroup))
+    .where(and(eq(contacts.userId, userId), search ? searchCondition(search) : undefined, inGroup))
     .orderBy(asc(contacts.name), asc(contacts.createdAt));
 }
 
-export async function countContacts(): Promise<number> {
+export async function countContacts(userId: string): Promise<number> {
   await connection();
 
-  const [{ total }] = await db.select({ total: count() }).from(contacts);
+  const [{ total }] = await db
+    .select({ total: count() })
+    .from(contacts)
+    .where(eq(contacts.userId, userId));
   return total;
 }
 
-export async function getContact(id: string): Promise<Contact | null> {
+/** The contact, or null if there is none with this id among the user's own. */
+export async function getContact(userId: string, id: string): Promise<Contact | null> {
   await connection();
 
   if (!contactIdSchema.safeParse(id).success) return null;
 
-  const [contact] = await db.select().from(contacts).where(eq(contacts.id, id)).limit(1);
+  const [contact] = await db
+    .select()
+    .from(contacts)
+    .where(and(eq(contacts.id, id), eq(contacts.userId, userId)))
+    .limit(1);
   return contact ?? null;
 }
 
@@ -141,7 +152,7 @@ const SNIPPET_LENGTH = 200;
  * frequency was set. Postgres adds months by the calendar (15 Sep + 1 month
  * = 15 Oct), and "now" comes from one clock: the database's.
  */
-export async function listDueContacts(): Promise<DueContact[]> {
+export async function listDueContacts(userId: string): Promise<DueContact[]> {
   await connection();
 
   const lastNote = db
@@ -177,18 +188,26 @@ export async function listDueContacts(): Promise<DueContact[]> {
     })
     .from(contacts)
     .leftJoinLateral(lastNote, sql`true`)
-    .where(and(isNotNull(contacts.contactFrequency), sql`${dueAt} <= now()`))
+    .where(
+      and(
+        eq(contacts.userId, userId),
+        isNotNull(contacts.contactFrequency),
+        sql`${dueAt} <= now()`,
+      ),
+    )
     .orderBy(dueAt, asc(contacts.name), asc(contacts.id));
 }
 
-export async function listNotes(contactId: string): Promise<Note[]> {
+/** The notes of one of the user's own contacts; none for somebody else's. */
+export async function listNotes(userId: string, contactId: string): Promise<Note[]> {
   await connection();
 
   if (!contactIdSchema.safeParse(contactId).success) return [];
 
   return db
-    .select()
+    .select(getTableColumns(notes))
     .from(notes)
-    .where(eq(notes.contactId, contactId))
+    .innerJoin(contacts, eq(contacts.id, notes.contactId))
+    .where(and(eq(notes.contactId, contactId), eq(contacts.userId, userId)))
     .orderBy(desc(notes.createdAt));
 }

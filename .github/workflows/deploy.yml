@@ -1,5 +1,6 @@
 # Every push to main: build the image, push it to GHCR tagged with the commit
-# SHA, then deploy it on the server (migrations -> new version -> smoke /health).
+# SHA, then deploy it on the server (database backup -> migrations -> new
+# version -> smoke /health).
 # The deploy logic lives in deploy/; this file only calls it.
 name: Deploy
 

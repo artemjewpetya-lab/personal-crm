@@ -1,9 +1,19 @@
 # Production stack on the server, docker compose project "prod".
-# Lives in /opt/personal-crm next to .env (owner deploy, mode 600) with
-# POSTGRES_USER, POSTGRES_PASSWORD and POSTGRES_DB - the same names as in the
-# root .env.example. DATABASE_URL is built from them below, so the password
-# must be URL-safe: generate it with `openssl rand -hex 32`.
-# Do not run it by hand: deploy.sh sets APP_TAG (the image tag = commit SHA).
+# Lives in /opt/personal-crm next to .env (owner deploy, mode 600) with these lines,
+# the same names as in the root .env.example. All of them are required: without one,
+# compose stops with its name before anything is touched.
+#   POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB - the database. DATABASE_URL is built from
+#     them below, so the password must be URL-safe: `openssl rand -hex 32`.
+#   OWNER_EMAIL - the owner's email: the update that brought sign-in gives the existing
+#     contacts and groups to this user (the migrate container).
+#   BETTER_AUTH_SECRET - a random string that signs the sign-in cookie, new for the server
+#     (not the local one): `openssl rand -base64 32`.
+#   BETTER_AUTH_URL - the public address, https://app.personalcrm.site.
+#   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD - the mail server for sign-in emails:
+#     Resend over SMTP (smtp.resend.com, 465, resend, the Resend key).
+#   MAIL_FROM_ADDRESS - the sender address, noreply@mail.personalcrm.site.
+# Do not run it by hand: deploy.sh and restore.sh set APP_TAG (the image tag =
+# commit SHA).
 
 x-logging: &logging
   driver: json-file
@@ -11,10 +21,11 @@ x-logging: &logging
     max-size: "10m"
     max-file: "3"
 
+x-database-env: &database-env
+  DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER is not set in .env}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set in .env}@db:5432/${POSTGRES_DB:?POSTGRES_DB is not set in .env}
+
 x-app: &app
   image: ghcr.io/artemjewpetya-lab/personal-crm:${APP_TAG:?APP_TAG is not set, run deploy.sh}
-  environment:
-    DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER is not set in .env}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set in .env}@db:5432/${POSTGRES_DB:?POSTGRES_DB is not set in .env}
   depends_on:
     db:
       condition: service_healthy
@@ -43,12 +54,25 @@ services:
   # The profile keeps it out of "up"; deploy.sh starts it with "run".
   migrate:
     <<: *app
+    environment:
+      <<: *database-env
+      # Migration 0005 gives the existing contacts and groups to this user and stops without it
+      OWNER_EMAIL: ${OWNER_EMAIL:?OWNER_EMAIL is not set in .env}
     command: ["node", "scripts/migrate.mts"]
     restart: "no"
     profiles: [migrate]
 
   app:
     <<: *app
+    environment:
+      <<: *database-env
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET is not set in .env}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?BETTER_AUTH_URL is not set in .env}
+      SMTP_HOST: ${SMTP_HOST:?SMTP_HOST is not set in .env}
+      SMTP_PORT: ${SMTP_PORT:?SMTP_PORT is not set in .env}
+      SMTP_USER: ${SMTP_USER:?SMTP_USER is not set in .env}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:?SMTP_PASSWORD is not set in .env}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:?MAIL_FROM_ADDRESS is not set in .env}
     restart: unless-stopped
     ports:
       # Loopback only: nginx on the host proxies app.personalcrm.site here.

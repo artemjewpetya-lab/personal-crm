@@ -21,6 +21,25 @@ describe("buildSignInEmail", () => {
     expect(text).toContain(LINK);
     expect(text).toContain("15 минут");
     expect(text).toContain("Если вы не запрашивали вход - просто проигнорируйте письмо");
+
+    // Without the test stand flag there is no test mark
+    expect(html).not.toContain("тест-стенд");
+    expect(text).not.toContain("тест-стенд");
+  });
+
+  it("Письмо с тест-стенда: пометка в теме и вверху письма", () => {
+    const { subject, html, text } = buildSignInEmail(LINK, { testStand: true });
+
+    expect(subject).toBe("[Тест] Вход в Личную CRM");
+
+    // The top line of the letter, in both versions
+    expect(html).toMatch(/<p [^>]*>Личная CRM · тест-стенд<\/p>/);
+    expect(text.split("\n")[0]).toBe("Личная CRM · тест-стенд");
+
+    // The rest of the letter is the same: the button with the link, the lifetime
+    expect(html).toMatch(/<a [^>]*href="[^"]*token=abc[^"]*"[^>]*>\s*Войти\s*<\/a>/);
+    expect(text).toContain(LINK);
+    expect(text).toContain("15 минут");
   });
 
   it("escapes the link in the HTML version", () => {

@@ -1,19 +1,25 @@
-# Production stack on the server, docker compose project "prod".
-# Lives in /opt/personal-crm next to .env (owner deploy, mode 600) with these lines,
-# the same names as in the root .env.example. All of them are required: without one,
-# compose stops with its name before anything is touched.
+# The app and its database on the server. One file for both environments, each is its
+# own docker compose project with its own database volume and .env:
+#   prod - project "prod", .env in /opt/personal-crm
+#   staging (the test stand) - project "staging", .env in /opt/personal-crm/staging
+# The .env (owner deploy, mode 600) has these lines, the same names as in the root
+# .env.example; the test stand has its own values for all of them. All are required:
+# without one, compose stops with its name before anything is touched.
 #   POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB - the database. DATABASE_URL is built from
 #     them below, so the password must be URL-safe: `openssl rand -hex 32`.
 #   OWNER_EMAIL - the owner's email: the update that brought sign-in gives the existing
 #     contacts and groups to this user (the migrate container).
 #   BETTER_AUTH_SECRET - a random string that signs the sign-in cookie, new for the server
 #     (not the local one): `openssl rand -base64 32`.
-#   BETTER_AUTH_URL - the public address, https://app.personalcrm.site.
+#   BETTER_AUTH_URL - the public address: https://app.personalcrm.site for prod,
+#     https://test-app.personalcrm.site for the test stand. The link in the sign-in email
+#     is built from it, so it leads to the environment where the sign-in was asked for.
 #   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD - the mail server for sign-in emails:
-#     Resend over SMTP (smtp.resend.com, 465, resend, the Resend key).
+#     Resend over SMTP (smtp.resend.com, 465, resend, the Resend key; its own key for
+#     each environment).
 #   MAIL_FROM_ADDRESS - the sender address, noreply@mail.personalcrm.site.
-# Do not run it by hand: deploy.sh and restore.sh set APP_TAG (the image tag =
-# commit SHA).
+# Do not run it by hand: the scripts (common.sh) set APP_TAG (the image tag = commit
+# SHA) and, per environment, APP_PORT, APP_MEM_LIMIT and DB_MEM_LIMIT.
 
 x-logging: &logging
   driver: json-file
@@ -26,6 +32,8 @@ x-database-env: &database-env
 
 x-app: &app
   image: ghcr.io/artemjewpetya-lab/personal-crm:${APP_TAG:?APP_TAG is not set, run deploy.sh}
+  # 0 = no limit (prod); the test stand is limited, so it cannot take prod's memory.
+  mem_limit: ${APP_MEM_LIMIT:?APP_MEM_LIMIT is not set, run deploy.sh}
   depends_on:
     db:
       condition: service_healthy
@@ -35,6 +43,7 @@ services:
   db:
     image: postgres:18
     restart: unless-stopped
+    mem_limit: ${DB_MEM_LIMIT:?DB_MEM_LIMIT is not set, run deploy.sh}
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is not set in .env}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set in .env}
@@ -75,8 +84,9 @@ services:
       MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:?MAIL_FROM_ADDRESS is not set in .env}
     restart: unless-stopped
     ports:
-      # Loopback only: nginx on the host proxies app.personalcrm.site here.
-      - "127.0.0.1:3000:3000"
+      # Loopback only: nginx on the host proxies the site here
+      # (prod app.personalcrm.site -> 3000, test stand test-app.personalcrm.site -> 3001).
+      - "127.0.0.1:${APP_PORT:?APP_PORT is not set, run deploy.sh}:3000"
 
 volumes:
   pgdata:

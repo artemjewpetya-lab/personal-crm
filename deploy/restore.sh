@@ -15,6 +15,8 @@ set -euo pipefail
 
 # shellcheck source=common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
+# Only prod is backed up and restored. The test stand: copy-prod-db.sh.
+use_env prod
 
 if [[ $# -ne 1 ]]; then
   echo "Usage: restore.sh <backup file>" >&2
@@ -76,7 +78,7 @@ if [[ "$backup_version" != "$current_tag" ]]; then
   echo "  with this database."
   if [[ "$backup_version" =~ ^[0-9a-f]{7,40}$ ]]; then
     echo "  To go back to that version first, answer no and run:"
-    echo "    sudo -u deploy bash $APP_DIR/deploy.sh $backup_version"
+    echo "    sudo -u deploy bash $APP_DIR/deploy.sh prod $backup_version"
     echo "  then run restore.sh again."
   fi
   echo
@@ -126,18 +128,8 @@ if ! compose stop app; then
   exit 1
 fi
 
-log "Dropping the database $db_name and creating it again"
-# shellcheck disable=SC2016
-compose exec -T db sh -c '
-  dropdb --if-exists --force -U "$POSTGRES_USER" --maintenance-db=postgres "$POSTGRES_DB" &&
-  createdb -U "$POSTGRES_USER" --maintenance-db=postgres -O "$POSTGRES_USER" "$POSTGRES_DB"
-' </dev/null || restore_failed
-
-log "Loading the backup"
-# shellcheck disable=SC2016
-compose exec -T db sh -c \
-  'pg_restore --exit-on-error --single-transaction --no-owner -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
-  <"$file" || restore_failed
+log "Dropping the database $db_name, creating it again and loading the backup"
+load_backup "$file" || restore_failed
 
 log "Starting the app $current_tag"
 if ! compose up -d --no-deps app || ! smoke_test "$current_tag"; then

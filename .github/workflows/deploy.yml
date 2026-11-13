@@ -1,6 +1,8 @@
 # Every push to main: build the image, push it to GHCR tagged with the commit
-# SHA, then deploy it on the server (database backup -> migrations -> new
-# version -> smoke /health).
+# SHA, then deploy the same image to the test stand and to prod, at the same time
+# and independently: a failed deploy to one does not stop the other.
+#   staging (the test stand): migrations -> new version -> smoke /health
+#   prod: database backup -> migrations -> new version -> smoke /health
 # The deploy logic lives in deploy/; this file only calls it.
 name: Deploy
 
@@ -8,9 +10,9 @@ on:
   push:
     branches: [main]
 
-# One deploy at a time; a newer push waits for the running one to finish.
+# One run at a time, in the order of the pushes; a newer push waits for the running one.
 concurrency:
-  group: deploy-prod
+  group: deploy
   cancel-in-progress: false
 
 permissions:
@@ -48,19 +50,56 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  deploy:
-    name: Deploy to the server
+  deploy-staging:
+    name: Deploy to staging
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Never two deploys to the test stand at once (the server also has a lock).
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
+    # The history of the test stand's deploys: GitHub -> Deployments -> staging.
+    environment:
+      name: staging
+      url: https://test-app.personalcrm.site
     permissions:
       contents: read
       packages: read
     steps:
       - uses: actions/checkout@v7
 
-      - name: Run deploy/ci-deploy.sh
-        run: bash deploy/ci-deploy.sh
+      - name: Run deploy/ci-deploy.sh staging
+        run: bash deploy/ci-deploy.sh staging
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          IMAGE_TAG: ${{ github.sha }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy-prod:
+    name: Deploy to prod
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Never two deploys to prod at once (the server also has a lock).
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
+    environment:
+      name: production
+      url: https://app.personalcrm.site
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Run deploy/ci-deploy.sh prod
+        run: bash deploy/ci-deploy.sh prod
         env:
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
           DEPLOY_USER: ${{ vars.DEPLOY_USER }}

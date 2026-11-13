@@ -104,6 +104,9 @@ export const auth = betterAuth({
   }),
 
   advanced: {
+    // No crossSubDomainCookies here on purpose: the sign-in cookie has no Domain, so it stays
+    // on its own subdomain. Signing in on the test stand (test-app.) does not sign in on prod
+    // (app.), and the other way round.
     database: { generateId: "uuid" },
     // Same order as in deviceOf: what nginx wrote first.
     ipAddress: { ipAddressHeaders: ["x-real-ip", "x-forwarded-for"] },

@@ -24,7 +24,10 @@ export async function sendSignInEmail(to: string, url: string): Promise<void> {
     socketTimeout: 20_000,
   });
 
-  const { subject, html, text } = buildSignInEmail(url);
+  // APP_ENV is set by the deploy scripts (deploy/common.sh): "staging" on the test stand.
+  const { subject, html, text } = buildSignInEmail(url, {
+    testStand: process.env.APP_ENV === "staging",
+  });
   try {
     await transport.sendMail({
       from: { name: SENDER_NAME, address },

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   deleteMessagesTo,
@@ -29,6 +29,20 @@ describe("sendSignInEmail", () => {
     expect(message.html).toContain("Войти");
     expect(message.text).toContain("15 минут");
     expect(message.text).toContain("Если вы не запрашивали вход - просто проигнорируйте письмо");
+    expect(signInLinkOf(message)).toBe(LINK);
+  });
+
+  it("Письмо с тест-стенда (APP_ENV=staging): пометка в теме", async () => {
+    vi.stubEnv("APP_ENV", "staging");
+    try {
+      await sendSignInEmail("anna@example.com", LINK);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+
+    const message = await waitForMessageTo("anna@example.com");
+    expect(message.subject).toBe("[Тест] Вход в Личную CRM");
+    expect(message.text).toContain("Личная CRM · тест-стенд");
     expect(signInLinkOf(message)).toBe(LINK);
   });
 

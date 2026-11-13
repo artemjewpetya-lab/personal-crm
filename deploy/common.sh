@@ -29,6 +29,7 @@ env_dir_of() {
 # Selects the environment the script works with: prod or staging (the test stand).
 # Sets ENV_NAME (also the docker compose project name), ENV_DIR, STATE_DIR,
 # LOCK_FILE, HEALTH_URL and what compose.yaml takes from the environment:
+#   APP_ENV - prod or staging, for the app itself (the test stand marks its emails)
 #   APP_PORT - the loopback port of the app, nginx proxies the site to it
 #   APP_MEM_LIMIT, DB_MEM_LIMIT - memory limits of the containers, 0 = no limit
 use_env() {
@@ -47,9 +48,10 @@ use_env() {
   STATE_DIR="$ENV_DIR/state"
   LOCK_FILE="$STATE_DIR/deploy.lock"
   HEALTH_URL="http://127.0.0.1:$APP_PORT/health"
-  # compose.yaml reads these three from the environment.
-  export APP_PORT APP_MEM_LIMIT DB_MEM_LIMIT
-  readonly ENV_NAME ENV_DIR STATE_DIR LOCK_FILE HEALTH_URL APP_PORT APP_MEM_LIMIT DB_MEM_LIMIT
+  APP_ENV="$ENV_NAME"
+  # compose.yaml reads these from the environment.
+  export APP_ENV APP_PORT APP_MEM_LIMIT DB_MEM_LIMIT
+  readonly ENV_NAME ENV_DIR STATE_DIR LOCK_FILE HEALTH_URL APP_ENV APP_PORT APP_MEM_LIMIT DB_MEM_LIMIT
 }
 
 compose() {

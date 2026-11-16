@@ -8,21 +8,28 @@
 # one-off container -> start the new version -> smoke test /health -> (prod only)
 # remove old images.
 # The prod backup goes to backups/deploy_<UTC time>_<version that ran before>.dump;
-# the newest 30 are kept. restore.sh loads one back. The test stand has no backups:
-# its database is a copy of prod, made again from a prod backup by copy-prod-db.sh.
+# the newest 7 are kept (the daily backups of backup.sh are counted apart).
+# restore.sh loads one back. The test stand has no backups: its database is a copy
+# of prod, made again from a prod backup by copy-prod-db.sh.
 # Failed backup or migrations: the new version is not started, the old one keeps running.
 # Failed smoke test: the script exits with an error and rolls nothing back.
 #
-# CI (deploy/ci-deploy.sh) sends a short-lived GHCR token on stdin for the pull.
-# Manual rollback of prod: run this script with the previous tag; its image is kept
-# on the server, so no token is needed:
+# Who runs it: the Deploy staging workflow on every merge to main, the Deploy prod
+# workflow by hand (deploy/ci-deploy.sh). CI sends a short-lived GHCR token on stdin
+# for the pull.
+# Rollback of prod: Deploy prod with the rollback box ticked. If GitHub cannot run it,
+# the same by hand on the server (the image is kept there, no token is needed):
 #   sudo -u deploy bash /opt/personal-crm/deploy.sh prod "$(sudo cat /opt/personal-crm/state/previous_tag)"
 set -euo pipefail
 
 # shellcheck source=common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
-readonly KEEP_DEPLOY_BACKUPS=30
+readonly KEEP_DEPLOY_BACKUPS=7
+# After a prod deploy, app images older than this are removed from the server
+# (except the ones still needed, see step 7).
+readonly KEEP_IMAGE_DAYS=14
+readonly BACKUP_TIMER=personal-crm-backup.timer
 
 usage() {
   echo "Usage: deploy.sh <prod|staging> <image tag (commit SHA)> [registry user]" >&2
@@ -37,14 +44,19 @@ registry_user="${3:-github-actions}"
 image="$IMAGE_REPO:$tag"
 export APP_TAG="$tag"
 
+case "$ENV_NAME" in
+  prod) workflow="Deploy prod" ;;
+  staging) workflow="Deploy staging" ;;
+esac
+
 cd "$APP_DIR"
 check_user
 check_env_file
 
 if ! take_lock -w 300; then
-  echo "Waited 5 minutes for another deploy, a database restore or a copy of the" >&2
-  echo "prod database. When it is done, run the deploy again:" >&2
-  echo "GitHub -> Actions -> Deploy -> Re-run failed jobs." >&2
+  echo "Waited 5 minutes for another deploy, a database restore or backup, or a copy" >&2
+  echo "of the prod database. When it is done, run the deploy again:" >&2
+  echo "GitHub -> Actions -> $workflow -> Re-run failed jobs." >&2
   exit 1
 fi
 
@@ -56,6 +68,11 @@ fi
 
 current_tag="$(current_tag_of "$ENV_NAME")"
 log "Deploying $tag to $ENV_NAME (running now: ${current_tag:-none})"
+
+if [[ "$ENV_NAME" == prod ]] && ! systemctl is-active --quiet "$BACKUP_TIMER"; then
+  echo "Warning: the daily backup timer $BACKUP_TIMER is not active on the server," >&2
+  echo "so there are no daily backups. How to install it: README, \"Бэкапы и восстановление\"." >&2
+fi
 
 log "Starting the database"
 compose up -d --wait db
@@ -108,32 +125,50 @@ fi
 log "Starting the app $tag"
 compose up -d --no-deps app
 
-# 5. Smoke test: /health must answer 200 from the new version
+# 5. Smoke test: /health must answer 200 from the new version.
+# state/ is not changed: current_tag stays the version that ran before and passed
+# its smoke test. Deploy prod with the rollback box sees that the app runs another
+# version than current_tag and goes back to current_tag.
 if ! smoke_test "$tag"; then
-  echo "Nothing was rolled back. To roll back by hand, run on the server:" >&2
-  echo "  sudo -u deploy bash $APP_DIR/deploy.sh $ENV_NAME ${current_tag:-<previous tag>}" >&2
+  echo "Nothing was rolled back." >&2
+  if [[ -n "$current_tag" && "$current_tag" != "$tag" ]]; then
+    if [[ "$ENV_NAME" == prod ]]; then
+      echo "To roll back to $current_tag: GitHub -> Actions -> Deploy prod -> Run workflow," >&2
+      echo "tick the rollback box. Or by hand on the server:" >&2
+    else
+      echo "To roll back to $current_tag, run on the server:" >&2
+    fi
+    echo "  sudo -u deploy bash $APP_DIR/deploy.sh $ENV_NAME $current_tag" >&2
+  fi
   if [[ -n "$backup" ]]; then
     echo "Database backup from before this deploy: $backup" >&2
   fi
   exit 1
 fi
 
-# 6. Remember the versions: a manual rollback goes to the previous one.
+# 6. Remember the versions: current_tag is the version that passed its smoke test,
+# previous_tag the one before it, where a rollback goes.
 if [[ -n "$current_tag" && "$current_tag" != "$tag" ]]; then
   echo "$current_tag" > "$STATE_DIR/previous_tag"
 fi
 echo "$tag" > "$STATE_DIR/current_tag"
 previous_tag="$(cat "$STATE_DIR/previous_tag" 2>/dev/null || true)"
 
-# 7. After a prod deploy, remove the old app images, so the disk does not fill up.
-# Kept: the current and previous prod versions (for a rollback) and the version of
-# the test stand. If the other environment is pulling a new image right now and it
-# is removed, its compose pulls it again: the images in GHCR are public.
+# 7. After a prod deploy, remove the old app images, so the disk does not fill up:
+# the ones built more than KEEP_IMAGE_DAYS days ago. Always kept: the current and
+# previous prod versions (for a rollback) and the version of the test stand. If the
+# test stand is pulling a new image right now, it is new and stays.
 if [[ "$ENV_NAME" == prod ]]; then
   staging_tag="$(current_tag_of staging)"
+  cutoff="$(date -d "-$KEEP_IMAGE_DAYS days" +%s)"
   for old in $(docker image ls "$IMAGE_REPO" --format '{{.Tag}}'); do
-    if [[ "$old" != "$tag" && "$old" != "$previous_tag" && "$old" != "$staging_tag" ]]; then
-      log "Removing old image $IMAGE_REPO:$old"
+    if [[ "$old" == "<none>" || "$old" == "$tag" || "$old" == "$previous_tag" \
+      || "$old" == "$staging_tag" ]]; then
+      continue
+    fi
+    built="$(date -d "$(docker image inspect -f '{{.Created}}' "$IMAGE_REPO:$old")" +%s)"
+    if ((built < cutoff)); then
+      log "Removing old image $IMAGE_REPO:$old (built $(date -d "@$built" '+%Y-%m-%d'))"
       docker image rm "$IMAGE_REPO:$old" >/dev/null \
         || echo "Warning: could not remove $IMAGE_REPO:$old" >&2
     fi

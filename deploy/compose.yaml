@@ -21,11 +21,16 @@
 # Do not run it by hand: the scripts (common.sh) set APP_TAG (the image tag = commit
 # SHA) and, per environment, APP_ENV, APP_PORT, APP_MEM_LIMIT and DB_MEM_LIMIT.
 
+# Container logs go to the server journal (journald), not to a file that lives and dies
+# with the container: the lines survive a redeploy and a rollback, and systemd itself
+# deletes the oldest ones at its size limit. The driver is set here, not in
+# /etc/docker/daemon.json, which is shared with other things on the server.
+# Read them: sudo journalctl -t <project>-<service>-1 (README, "Логи приложения на сервере").
 x-logging: &logging
-  driver: json-file
+  driver: journald
   options:
-    max-size: "10m"
-    max-file: "3"
+    # The line label: prod-app-1 instead of the container id, which changes on every redeploy.
+    tag: "{{.Name}}"
 
 x-database-env: &database-env
   DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER is not set in .env}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set in .env}@db:5432/${POSTGRES_DB:?POSTGRES_DB is not set in .env}

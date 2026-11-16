@@ -7,7 +7,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { ContactAvatar } from "@/components/contact-avatar";
 import { MarkContactedButton } from "@/components/mark-contacted-button";
 import { Button } from "@/components/ui/button";
-import { DUE_VISIBLE_AT_FIRST, dueBlockView } from "@/lib/contacts/due-block";
+import { HOME_BLOCK_VISIBLE_AT_FIRST, homeBlockView } from "@/lib/home-block";
 
 // Texts come ready from the server: dates are formatted there, the same way
 // as in the contact card, so the browser's time zone cannot change them.
@@ -26,13 +26,13 @@ export function KeepInTouchList({ items }: { items: KeepInTouchItem[] }) {
   const headingId = useId();
   const listRef = useRef<HTMLUListElement>(null);
   const [expanded, setExpanded] = useState(false);
-  const { visible, showAll } = dueBlockView(items, expanded);
+  const { visible, showAll } = homeBlockView(items, expanded);
 
   // The button disappears once pressed: move focus to the first revealed
   // contact, so keyboard users continue from where the list grew.
   useEffect(() => {
     if (!expanded) return;
-    listRef.current?.querySelectorAll("a")[DUE_VISIBLE_AT_FIRST]?.focus();
+    listRef.current?.querySelectorAll("a")[HOME_BLOCK_VISIBLE_AT_FIRST]?.focus();
   }, [expanded]);
 
   return (

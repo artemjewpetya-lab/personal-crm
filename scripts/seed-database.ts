@@ -18,6 +18,7 @@ import {
   type NewContact,
   type NewNote,
 } from "../src/db/schema";
+import { isLeapYear } from "../src/lib/contacts/birthdays";
 import { CONTACT_FREQUENCIES } from "../src/lib/contacts/frequency";
 import { PRESET_GROUP_NAMES } from "../src/lib/groups/presets";
 
@@ -26,6 +27,12 @@ const RANDOM_SEED = 42;
 const INSERT_CHUNK_SIZE = 500;
 // Share of contacts with a contact frequency, so "Пора связаться" shows up right away.
 const FREQUENCY_SHARE = 0.15;
+// Share of contacts with a birth date, and of those, with the day and month only. With 1 000
+// contacts about a dozen have a birthday in any given week, so "Скоро день рождения" shows up
+// right away, together with «Показать всех».
+const BIRTHDAY_SHARE = 0.6;
+const BIRTHDAY_WITHOUT_YEAR_SHARE = 1 / 3;
+const BIRTH_YEARS = { min: 1950, max: 2005 };
 
 // Share of contacts put into each ready-made group. The draws are independent,
 // so some contacts end up in two groups.
@@ -538,7 +545,8 @@ async function findOrCreateOwner(db: NodePgDatabase, email: string): Promise<str
 
 /**
  * Fills an empty database with CONTACT_COUNT (1000) contacts with notes for the user with
- * `ownerEmail` (OWNER_EMAIL). The contacts are spread over the owner's ready-made groups.
+ * `ownerEmail` (OWNER_EMAIL). The contacts are spread over the owner's ready-made groups,
+ * and about 60% have a birth date.
  * Other users get nothing. Does nothing if there are contacts already.
  */
 export async function seedDatabase(
@@ -578,17 +586,8 @@ export async function seedDatabase(
     }
   }
 
-  await db.transaction(async (tx) => {
-    for (const rows of chunk(contactRows, INSERT_CHUNK_SIZE)) {
-      await tx.insert(contacts).values(rows);
-    }
-    for (const rows of chunk(noteRows, INSERT_CHUNK_SIZE)) {
-      await tx.insert(notes).values(rows);
-    }
-  });
-
-  // Drawn last for the same reason. A ready-made group of the owner that was deleted or
-  // renamed is skipped.
+  // Drawn after the frequencies, still before the birth dates. A ready-made group of the owner
+  // that was deleted or renamed is skipped.
   const groupIdsByName = new Map(
     (
       await db
@@ -615,6 +614,35 @@ export async function seedDatabase(
       }
     }
   }
+  // Drawn last of all, so the contacts, notes, frequencies and groups stay the same as before
+  // birth dates existed (a test checks it). A contact with a year of birth never has a
+  // 29 February that did not exist in that year.
+  for (const contact of contactRows) {
+    if (!faker.datatype.boolean(BIRTHDAY_SHARE)) continue;
+    // 2000 is a leap year, so 29 February is among the days
+    const day = faker.date.between({
+      from: new Date(Date.UTC(2000, 0, 1)),
+      to: new Date(Date.UTC(2000, 11, 31)),
+    });
+    contact.birthDay = day.getUTCDate();
+    contact.birthMonth = day.getUTCMonth() + 1;
+    if (!faker.datatype.boolean(BIRTHDAY_WITHOUT_YEAR_SHARE)) {
+      const birthYear = faker.number.int(BIRTH_YEARS);
+      const impossible =
+        contact.birthMonth === 2 && contact.birthDay === 29 && !isLeapYear(birthYear);
+      contact.birthYear = impossible ? null : birthYear;
+    }
+  }
+
+  await db.transaction(async (tx) => {
+    for (const rows of chunk(contactRows, INSERT_CHUNK_SIZE)) {
+      await tx.insert(contacts).values(rows);
+    }
+    for (const rows of chunk(noteRows, INSERT_CHUNK_SIZE)) {
+      await tx.insert(notes).values(rows);
+    }
+  });
+
   for (const rows of chunk(membershipRows, INSERT_CHUNK_SIZE)) {
     await db.insert(contactGroups).values(rows);
   }

@@ -10,14 +10,21 @@ import { KeepInTouchList, type KeepInTouchItem } from "@/components/keep-in-touc
 import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  UpcomingBirthdaysList,
+  type UpcomingBirthdayItem,
+} from "@/components/upcoming-birthdays-list";
+import { moscowToday, upcomingBirthdays, type UpcomingBirthday } from "@/lib/contacts/birthdays";
+import {
   countContacts,
+  listContactBirthdays,
   listContacts,
   listDueContacts,
+  type ContactBirthday,
   type ContactListItem,
   type DueContact,
 } from "@/lib/contacts/queries";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { formatDate, formatOverdue, pluralize } from "@/lib/format";
+import { formatBirthdayRow, formatDate, formatOverdue, pluralize } from "@/lib/format";
 import { resolveGroupFilter } from "@/lib/groups/filter";
 import { listGroups } from "@/lib/groups/queries";
 
@@ -73,19 +80,29 @@ async function ContactFilters() {
 async function ContactList({ searchParams }: Pick<PageProps<"/">, "searchParams">) {
   const [user, { q, group }] = await Promise.all([getCurrentUser(), searchParams]);
   const search = typeof q === "string" ? q.trim() : "";
-  // "Пора связаться" is hidden while searching, so it is not even read then.
-  // The group filter does not touch it. A group that does not exist filters nothing.
-  const [items, total, due, groups] = await Promise.all([
+  // "Скоро день рождения" and "Пора связаться" are hidden while searching, so they are not even
+  // read then. The group filter does not touch them. A group that does not exist filters nothing.
+  const [items, total, due, birthdays, groups] = await Promise.all([
     listContacts(user.id, search, typeof group === "string" ? group : null),
     countContacts(user.id),
     search ? [] : listDueContacts(user.id),
+    search ? [] : listContactBirthdays(user.id),
     listGroups(user.id),
   ]);
+  // After the reads: "today" (in Moscow) is taken once the page is being rendered for this request.
+  const soon = upcomingBirthdays(birthdays, moscowToday());
   const groupId = resolveGroupFilter(group, groups);
   const groupName = groups.find((item) => item.id === groupId)?.name ?? null;
 
   return (
     <>
+      {soon.length > 0 && (
+        // Like the block below: the data is already here, so this boundary never shows a
+        // fallback; it lets React make the block clickable without waiting for the contact list.
+        <Suspense>
+          <UpcomingBirthdaysList items={soon.map(toUpcomingBirthdayItem)} />
+        </Suspense>
+      )}
       {due.length > 0 && (
         // The data is already here, so this boundary never shows a fallback. It lets
         // React make the block clickable on its own, without waiting for the long
@@ -98,6 +115,10 @@ async function ContactList({ searchParams }: Pick<PageProps<"/">, "searchParams"
       <ContactListSection search={search} groupName={groupName} items={items} total={total} />
     </>
   );
+}
+
+function toUpcomingBirthdayItem(contact: UpcomingBirthday<ContactBirthday>): UpcomingBirthdayItem {
+  return { id: contact.id, name: contact.name, ...formatBirthdayRow(contact) };
 }
 
 function toKeepInTouchItem(contact: DueContact): KeepInTouchItem {

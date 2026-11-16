@@ -135,6 +135,43 @@ export async function getContact(userId: string, id: string): Promise<Contact | 
   return contact ?? null;
 }
 
+/** What "Скоро день рождения" needs from a contact: a name and a date with a known day and month. */
+export type ContactBirthday = {
+  id: string;
+  name: string;
+  birthDay: number;
+  birthMonth: number;
+  birthYear: number | null;
+};
+
+/**
+ * The user's contacts that have a birth date, by name (like the contact list). Which of them
+ * are "soon" is decided by `upcomingBirthdays` in the app, not here: the rules for 29 February
+ * and "today in Moscow" live in one place (see design.md, decision 3).
+ */
+export async function listContactBirthdays(userId: string): Promise<ContactBirthday[]> {
+  await connection();
+
+  const rows = await db
+    .select({
+      id: contacts.id,
+      name: contacts.name,
+      birthDay: contacts.birthDay,
+      birthMonth: contacts.birthMonth,
+      birthYear: contacts.birthYear,
+    })
+    .from(contacts)
+    // The database keeps day and month together, so one check is enough
+    .where(and(eq(contacts.userId, userId), isNotNull(contacts.birthDay)))
+    .orderBy(asc(contacts.name), asc(contacts.createdAt));
+
+  return rows.flatMap((row) =>
+    row.birthDay === null || row.birthMonth === null
+      ? []
+      : [{ ...row, birthDay: row.birthDay, birthMonth: row.birthMonth }],
+  );
+}
+
 export type DueContact = Pick<Contact, "id" | "name"> & {
   lastNoteAt: Date | null;
   /** First line of the last note, at most 200 characters */

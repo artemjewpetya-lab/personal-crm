@@ -57,6 +57,15 @@ function frequencySetAtOnUpdate(frequency: ContactFrequency | null) {
   end`;
 }
 
+/** The three birth date columns for a checked birth date; "no date" is three empty values. */
+function birthdayColumns(birthday: { day: number; month: number; year: number | null } | null) {
+  return {
+    birthDay: birthday?.day ?? null,
+    birthMonth: birthday?.month ?? null,
+    birthYear: birthday?.year ?? null,
+  };
+}
+
 export async function createContact(
   values: ContactFormValues,
 ): Promise<ActionResult<{ id: string; name: string }, ContactFieldName>> {
@@ -64,7 +73,7 @@ export async function createContact(
   if (!parsed.success) {
     return { ok: false, fieldErrors: contactFieldErrors(parsed.error) };
   }
-  const { groupIds, newGroupNames, ...fields } = parsed.data;
+  const { groupIds, newGroupNames, birthday, ...fields } = parsed.data;
 
   // Outside the try on purpose: without a sign-in this redirects to the sign-in page.
   const user = await getCurrentUser();
@@ -76,6 +85,7 @@ export async function createContact(
         .insert(contacts)
         .values({
           ...fields,
+          ...birthdayColumns(birthday),
           userId: user.id,
           contactFrequencySetAt: fields.contactFrequency ? sql`now()` : null,
         })
@@ -107,7 +117,7 @@ export async function updateContact(
   if (!parsed.success) {
     return { ok: false, fieldErrors: contactFieldErrors(parsed.error) };
   }
-  const { groupIds, newGroupNames, ...fields } = parsed.data;
+  const { groupIds, newGroupNames, birthday, ...fields } = parsed.data;
 
   const user = await getCurrentUser();
 
@@ -118,6 +128,8 @@ export async function updateContact(
         .update(contacts)
         .set({
           ...fields,
+          // Always all three: cleared parts remove the date
+          ...birthdayColumns(birthday),
           contactFrequencySetAt: frequencySetAtOnUpdate(fields.contactFrequency),
           updatedAt: sql`now()`,
         })

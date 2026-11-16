@@ -2,6 +2,7 @@
 
 import { useId, useState, type FormEvent, type ReactNode } from "react";
 
+import { BirthdayField, type BirthdayDefault } from "@/components/birthday-field";
 import { ContactGroupsField, splitChosenGroups } from "@/components/contact-groups-field";
 import { FREQUENCY_OPTIONS, FrequencyOptions } from "@/components/frequency-options";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -13,7 +14,7 @@ import type { PickerGroup } from "@/lib/groups/picker";
 import type { ContactFieldName, ContactFormValues, FieldErrors } from "@/lib/contacts/validation";
 
 type FieldConfig = {
-  name: Exclude<ContactFieldName, "contactFrequency" | "groups">;
+  name: Exclude<ContactFieldName, "contactFrequency" | "groups" | "birthday">;
   label: string;
   placeholder: string;
   type?: "text" | "tel" | "email";
@@ -56,15 +57,25 @@ const FIELDS: FieldConfig[] = [
   },
 ];
 
+/** What the form is filled with when it opens: text fields as strings, the birth date as numbers. */
+export type ContactFormDefaults = Partial<
+  Record<Exclude<ContactFieldName, "groups" | "birthday">, string | null>
+> & { birthday?: BirthdayDefault | null };
+
 export function readContactForm(form: HTMLFormElement): ContactFormValues {
   const data = new FormData(form);
-  const text = (name: Exclude<ContactFieldName, "groups">) => String(data.get(name) ?? "");
+  const text = (name: string) => String(data.get(name) ?? "");
   return {
     name: text("name"),
     about: text("about"),
     howWeMet: text("howWeMet"),
     phone: text("phone"),
     email: text("email"),
+    birthday: {
+      day: text("birthdayDay"),
+      month: text("birthdayMonth"),
+      year: text("birthdayYear"),
+    },
     contactFrequency: text("contactFrequency"),
   };
 }
@@ -78,7 +89,7 @@ export function ContactForm({
   onSubmit,
   footer,
 }: {
-  defaultValues?: Partial<Record<Exclude<ContactFieldName, "groups">, string | null>>;
+  defaultValues?: ContactFormDefaults;
   /** All saved groups, to choose from */
   groups: PickerGroup[];
   /** The groups the contact is in when the form opens */
@@ -135,6 +146,11 @@ export function ContactForm({
             </Field>
           );
         })}
+        <BirthdayField
+          id={`${idPrefix}-birthday`}
+          defaultValue={defaultValues?.birthday}
+          error={errors.birthday}
+        />
         <FrequencyField
           id={`${idPrefix}-contactFrequency`}
           defaultValue={defaultValues?.contactFrequency}

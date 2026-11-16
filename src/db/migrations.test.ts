@@ -9,6 +9,7 @@ import {
 const LAST_MIGRATION_BEFORE_FREQUENCY = "0000_init";
 const LAST_MIGRATION_BEFORE_GROUPS = "0001_contact_frequency";
 const LAST_MIGRATION_BEFORE_LOGIN = "0003_preset_groups";
+const LAST_MIGRATION_BEFORE_BIRTHDAYS = "0005_assign_owner";
 
 describe("migrations", () => {
   let database: TemporaryDatabase;
@@ -63,6 +64,88 @@ describe("migrations", () => {
     // They have no groups, and they belong to the owner.
     expect(await countRows(database, "contacts")).toBe(2);
     expect(await rowsOutsideOwnerOf(database, "contacts", TEST_OWNER_EMAIL)).toBe(0);
+  });
+
+  it("Контакты, добавленные до этой функции (дни рождения)", async () => {
+    await database.migrate({ upTo: LAST_MIGRATION_BEFORE_BIRTHDAYS, ownerEmail: TEST_OWNER_EMAIL });
+    const {
+      rows: [anna],
+    } = await database.pool.query<{ id: string }>(
+      `insert into contacts (user_id, name, about, phone, email, contact_frequency, contact_frequency_set_at)
+       values ((select id from users where email = $1), 'Анна', 'Коллега', '+7 900 123-45-67',
+               'anna@example.com', 'month', now())
+       returning id`,
+      [TEST_OWNER_EMAIL],
+    );
+    await database.pool.query(
+      "insert into contacts (user_id, name) values ((select id from users where email = $1), 'Борис')",
+      [TEST_OWNER_EMAIL],
+    );
+    await database.pool.query(
+      "insert into notes (contact_id, body) values ($1, 'Договорились о встрече')",
+      [anna.id],
+    );
+    await database.pool.query(
+      `insert into contact_groups (contact_id, group_id)
+       select $1, id from groups where name = 'Друзья'`,
+      [anna.id],
+    );
+    const before = await snapshot(database, { withBirthdays: true });
+
+    await database.migrate();
+
+    // Nobody has a birth date; everything else is as it was.
+    const after = await snapshot(database, { withBirthdays: true });
+    expect(after).toEqual({
+      ...before,
+      contacts: before.contacts.map((contact) => ({
+        ...contact,
+        birth_day: null,
+        birth_month: null,
+        birth_year: null,
+      })),
+    });
+    expect(after.contacts).toHaveLength(2);
+    expect(after.notes).toHaveLength(1);
+    expect(after.links).toHaveLength(1);
+  });
+
+  describe("Проверки даты рождения в базе", () => {
+    async function insertBirthday(day: number | null, month: number | null, year: number | null) {
+      await database.pool.query(
+        `insert into contacts (user_id, name, birth_day, birth_month, birth_year)
+         values ((select id from users where email = $1), 'Проверка', $2, $3, $4)`,
+        [TEST_OWNER_EMAIL, day, month, year],
+      );
+    }
+
+    beforeEach(async () => {
+      await database.migrate({ ownerEmail: TEST_OWNER_EMAIL });
+    });
+
+    it.each([
+      ["день без месяца", 20, null, null],
+      ["месяц без дня", null, 11, null],
+      ["год без дня и месяца", null, null, 1990],
+      ["год и день без месяца", 20, null, 1990],
+      ["месяц 13", 1, 13, null],
+      ["месяц 0", 1, 0, null],
+      ["день 32", 32, 1, null],
+      ["день 0", 0, 1, null],
+      ["год раньше 1900", 20, 11, 1899],
+    ])("Отклоняется: %s", async (_name, day, month, year) => {
+      // Rejected by a database check, not for some other reason (like a missing column)
+      await expect(insertBirthday(day, month, year)).rejects.toThrow(/violates check constraint/);
+    });
+
+    it.each([
+      ["даты нет", null, null, null],
+      ["день и месяц", 20, 11, null],
+      ["полная дата", 20, 11, 1990],
+      ["29 февраля без года", 29, 2, null],
+    ])("Принимается: %s", async (_name, day, month, year) => {
+      await expect(insertBirthday(day, month, year)).resolves.toBeUndefined();
+    });
   });
 
   it("Контакты, добавленные до частоты общения", async () => {
@@ -213,13 +296,21 @@ function errorText(error: unknown): string {
 }
 
 /**
- * Every row of the data tables as it was, without the owner column that the update adds.
+ * Every row of the data tables as it was, without the columns that later updates add: the owner
+ * and the birth date (pass `withBirthdays: true` to see the birth date).
  * Before the groups update there are no group tables: pass `withGroups: false` then.
  */
-async function snapshot(database: TemporaryDatabase, { withGroups = true } = {}) {
+async function snapshot(
+  database: TemporaryDatabase,
+  { withGroups = true, withBirthdays = false } = {},
+) {
+  const omitted = withBirthdays
+    ? ["user_id"]
+    : ["user_id", "birth_day", "birth_month", "birth_year"];
   const read = async (table: string, order: string) => {
     const { rows } = await database.pool.query(
-      `select to_jsonb(t) - 'user_id' as row from ${table} t order by ${order}`,
+      `select to_jsonb(t) - $1::text[] as row from ${table} t order by ${order}`,
+      [omitted],
     );
     return rows.map((row) => row.row);
   };

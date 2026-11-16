@@ -54,3 +54,59 @@ export function formatDateParts(date: Date): { day: string; rest: string } {
 export function phoneHref(phone: string): string {
   return `tel:${phone.replace(/[^\d+]/g, "")}`;
 }
+
+// Birth dates are plain calendar dates, not moments: they are built with Date.UTC and
+// formatted in UTC, so the time zone of the server cannot move them to another day.
+const dayMonthFormat = new Intl.DateTimeFormat("ru-RU", {
+  day: "numeric",
+  month: "long",
+  timeZone: "UTC",
+});
+const fullDateFormat = new Intl.DateTimeFormat("ru-RU", {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+const utcDate = (year: number, month: number, day: number) =>
+  new Date(Date.UTC(year, month - 1, day));
+
+/**
+ * The line of a contact in "Скоро день рождения", in three parts so the middle one can be
+ * highlighted: "20 ноября, " + "через 4 дня" + " · исполнится 36".
+ */
+export function formatBirthdayRow({
+  date,
+  daysUntil,
+  age,
+}: {
+  date: { year: number; month: number; day: number };
+  daysUntil: number;
+  age: number | null;
+}): { before: string; when: string; after: string } {
+  const when =
+    daysUntil === 0
+      ? "сегодня"
+      : daysUntil === 1
+        ? "завтра"
+        : `через ${pluralize(daysUntil, ["день", "дня", "дней"])}`;
+  const verb = daysUntil === 0 ? "исполняется" : "исполнится";
+  return {
+    before: `${dayMonthFormat.format(utcDate(date.year, date.month, date.day))}, `,
+    when,
+    after: age === null ? "" : ` · ${verb} ${age}`,
+  };
+}
+
+/** "День рождения 20 ноября 1990 г. (35 лет)"; without a year "День рождения 20 ноября" */
+export function formatBirthdayLine(
+  birthday: { day: number; month: number; year: number | null },
+  age: number | null,
+): string {
+  if (birthday.year === null) {
+    return `День рождения ${dayMonthFormat.format(utcDate(2000, birthday.month, birthday.day))}`;
+  }
+  const date = fullDateFormat.format(utcDate(birthday.year, birthday.month, birthday.day));
+  return `День рождения ${date}${age === null ? "" : ` (${pluralize(age, ["год", "года", "лет"])})`}`;
+}

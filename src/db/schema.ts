@@ -1,10 +1,12 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   index,
   pgEnum,
   pgTable,
   primaryKey,
+  smallint,
   text,
   timestamp,
   uniqueIndex,
@@ -136,11 +138,30 @@ export const contacts = pgTable(
     contactFrequencySetAt: timestamp("contact_frequency_set_at", {
       withTimezone: true,
     }),
+    // Birth date: all three empty means "no date". Day and month go together; the year is
+    // optional but never without them. Whether the date exists (31 April) and is not in the
+    // future is checked by the app: the database only refuses plain nonsense.
+    birthDay: smallint("birth_day"),
+    birthMonth: smallint("birth_month"),
+    birthYear: smallint("birth_year"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  // The list is always "mine, by name".
-  (table) => [index("contacts_user_id_name_idx").on(table.userId, table.name)],
+  (table) => [
+    // The list is always "mine, by name".
+    index("contacts_user_id_name_idx").on(table.userId, table.name),
+    check(
+      "contacts_birth_day_month_together_check",
+      sql`(${table.birthDay} is null) = (${table.birthMonth} is null)`,
+    ),
+    check(
+      "contacts_birth_year_needs_day_check",
+      sql`${table.birthYear} is null or ${table.birthDay} is not null`,
+    ),
+    check("contacts_birth_day_range_check", sql`${table.birthDay} between 1 and 31`),
+    check("contacts_birth_month_range_check", sql`${table.birthMonth} between 1 and 12`),
+    check("contacts_birth_year_range_check", sql`${table.birthYear} >= 1900`),
+  ],
 );
 
 export const notes = pgTable(

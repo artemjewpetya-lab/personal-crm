@@ -5,7 +5,7 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { updateContact } from "@/app/contacts/actions";
-import { ContactForm } from "@/components/contact-form";
+import { ContactForm, type ContactFormDefaults } from "@/components/contact-form";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,7 +26,7 @@ export function EditContactDialog({
   contactGroups,
 }: {
   contactId: string;
-  defaultValues: Record<Exclude<ContactFieldName, "groups">, string | null>;
+  defaultValues: ContactFormDefaults;
   groups: PickerGroup[];
   contactGroups: PickerGroup[];
 }) {

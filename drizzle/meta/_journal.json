@@ -43,6 +43,13 @@
       "when": 1794331518556,
       "tag": "0005_assign_owner",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794840747260,
+      "tag": "0006_birthdays",
+      "breakpoints": true
     }
   ]
 }

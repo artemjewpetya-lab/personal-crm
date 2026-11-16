@@ -6,9 +6,11 @@ import {
   countContacts,
   getContact,
   listContacts,
+  listContactBirthdays,
   listDueContacts,
   listNotes,
 } from "@/lib/contacts/queries";
+import { moscowToday, upcomingBirthdays } from "@/lib/contacts/birthdays";
 import { resolveGroupFilter } from "@/lib/groups/filter";
 import { listContactGroups, listGroups } from "@/lib/groups/queries";
 
@@ -59,6 +61,18 @@ describe("Пользователь видит только своё", () => {
 
     expect(names(await listDueContacts(a))).toEqual(["Давно не общались"]);
     expect(await listDueContacts(b)).toEqual([]);
+  });
+
+  it("Скоро день рождения", async () => {
+    const today = moscowToday();
+    const tomorrow = new Date(Date.UTC(today.year, today.month - 1, today.day + 1));
+    await givenContact(a, "Именинник", {
+      birthDay: tomorrow.getUTCDate(),
+      birthMonth: tomorrow.getUTCMonth() + 1,
+    });
+
+    expect(names(upcomingBirthdays(await listContactBirthdays(a), today))).toEqual(["Именинник"]);
+    expect(await listContactBirthdays(b)).toEqual([]);
   });
 
   it("Группы", async () => {

@@ -249,3 +249,78 @@ describe("frequency and the due date", () => {
     expect(await dueNames()).toEqual([]);
   });
 });
+
+describe("birth date", () => {
+  const birthday = (day: string, month: string, year: string) => ({ day, month, year });
+
+  async function savedBirthday(id: string) {
+    const [saved] = await db
+      .select({ day: contacts.birthDay, month: contacts.birthMonth, year: contacts.birthYear })
+      .from(contacts)
+      .where(eq(contacts.id, id));
+    return saved;
+  }
+
+  it("Новый контакт без даты", async () => {
+    const id = await created(form());
+
+    expect(await savedBirthday(id)).toEqual({ day: null, month: null, year: null });
+  });
+
+  it("Дата с годом", async () => {
+    const id = await created(form({ birthday: birthday("20", "11", "1990") }));
+
+    expect(await savedBirthday(id)).toEqual({ day: 20, month: 11, year: 1990 });
+  });
+
+  it("Дата без года", async () => {
+    const id = await created(form({ birthday: birthday("20", "11", "") }));
+
+    expect(await savedBirthday(id)).toEqual({ day: 20, month: 11, year: null });
+  });
+
+  it("saves the date when an existing contact is changed", async () => {
+    const id = await givenContact(ownerId, "Анна");
+
+    const result = await updateContact(id, form({ birthday: birthday("3", "3", "") }));
+
+    expect(result.ok).toBe(true);
+    expect(await savedBirthday(id)).toEqual({ day: 3, month: 3, year: null });
+  });
+
+  it("Убрать дату", async () => {
+    const id = await givenContact(ownerId, "Анна", {
+      birthDay: 20,
+      birthMonth: 11,
+      birthYear: 1990,
+    });
+
+    const result = await updateContact(id, form({ birthday: birthday("", "", "") }));
+
+    expect(result.ok).toBe(true);
+    expect(await savedBirthday(id)).toEqual({ day: null, month: null, year: null });
+  });
+
+  it("Проверка на сервере", async () => {
+    const id = await givenContact(ownerId, "Анна", {
+      birthDay: 20,
+      birthMonth: 11,
+      birthYear: 1990,
+    });
+
+    const result = await updateContact(id, form({ birthday: birthday("31", "4", "1990") }));
+
+    expect(result).toEqual({
+      ok: false,
+      fieldErrors: { birthday: "Такой даты не бывает — проверьте день, месяц и год" },
+    });
+    expect(await savedBirthday(id)).toEqual({ day: 20, month: 11, year: 1990 });
+  });
+
+  it("does not create a contact with a wrong date", async () => {
+    const result = await createContact(form({ birthday: birthday("20", "", "") }));
+
+    expect(result).toEqual({ ok: false, fieldErrors: { birthday: "Выберите месяц" } });
+    expect(await db.select().from(contacts)).toEqual([]);
+  });
+});

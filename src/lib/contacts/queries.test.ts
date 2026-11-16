@@ -12,7 +12,8 @@ import {
   givenUser,
 } from "../../../test/factories";
 
-import { listContacts, listDueContacts } from "./queries";
+import { upcomingBirthdays } from "./birthdays";
+import { listContactBirthdays, listContacts, listDueContacts } from "./queries";
 
 const names = (items: { name: string }[]) => items.map((item) => item.name);
 
@@ -187,5 +188,50 @@ describe("listDueContacts", () => {
 
     expect(names(await listDueContacts(ownerId))).toEqual(["Борис"]);
     expect(names(await listContacts(ownerId, ""))).toEqual(["Анна", "Борис", "Вера"]);
+  });
+});
+
+describe("listContactBirthdays", () => {
+  const today = { year: 2026, month: 11, day: 16 };
+  const birthday = (day: number, month: number, year: number | null = null) => ({
+    birthDay: day,
+    birthMonth: month,
+    birthYear: year,
+  });
+
+  it("Порядок по близости", async () => {
+    // By name: Аня, Борис, Вера; by closeness: Аня and Вера (18 Nov, by name), then Борис (20 Nov)
+    await givenContact(ownerId, "Борис", birthday(20, 11));
+    await givenContact(ownerId, "Вера", birthday(18, 11, 2000));
+    await givenContact(ownerId, "Аня", birthday(18, 11));
+
+    const soon = upcomingBirthdays(await listContactBirthdays(ownerId), today);
+
+    expect(names(soon)).toEqual(["Аня", "Вера", "Борис"]);
+    expect(soon.map((item) => item.daysUntil)).toEqual([2, 2, 4]);
+    expect(soon[1].age).toBe(26);
+  });
+
+  it("Дней рождения скоро нет", async () => {
+    await givenContact(ownerId, "Аня", birthday(1, 3));
+    await givenContact(ownerId, "Борис", birthday(15, 11));
+
+    expect(upcomingBirthdays(await listContactBirthdays(ownerId), today)).toEqual([]);
+  });
+
+  it("reads only what the block needs, and only contacts with a date", async () => {
+    await givenContact(ownerId, "Аня", { ...birthday(20, 11, 1990), about: "Коллега" });
+    await givenContact(ownerId, "Борис");
+
+    const [anna, ...others] = await listContactBirthdays(ownerId);
+
+    expect(others).toEqual([]);
+    expect(anna).toEqual({
+      id: expect.any(String),
+      name: "Аня",
+      birthDay: 20,
+      birthMonth: 11,
+      birthYear: 1990,
+    });
   });
 });

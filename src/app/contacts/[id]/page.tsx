@@ -1,5 +1,6 @@
 import {
   ArrowLeftIcon,
+  CakeIcon,
   CalendarIcon,
   HandshakeIcon,
   MailIcon,
@@ -22,9 +23,16 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { ageOn, moscowToday } from "@/lib/contacts/birthdays";
 import { getContact, listNotes } from "@/lib/contacts/queries";
 import { listContactGroups, listGroups } from "@/lib/groups/queries";
-import { formatDateParts, formatDateTime, phoneHref, pluralize } from "@/lib/format";
+import {
+  formatBirthdayLine,
+  formatDateParts,
+  formatDateTime,
+  phoneHref,
+  pluralize,
+} from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -56,6 +64,11 @@ async function ContactDetails({ params }: Pick<PageProps<"/contacts/[id]">, "par
   if (!contact) notFound();
 
   const addedOn = formatDateParts(contact.createdAt);
+  // The age is counted for today in Moscow, like the "Скоро день рождения" block
+  const birthday =
+    contact.birthDay !== null && contact.birthMonth !== null
+      ? { day: contact.birthDay, month: contact.birthMonth, year: contact.birthYear }
+      : null;
 
   return (
     <div className="flex flex-col gap-8">
@@ -70,6 +83,12 @@ async function ContactDetails({ params }: Pick<PageProps<"/contacts/[id]">, "par
           <div>
             <h1 className="font-heading text-h2 font-semibold break-words">{contact.name}</h1>
             {contact.about && <p className="mt-1 text-muted-foreground">{contact.about}</p>}
+            {birthday && (
+              <p className="mt-2 flex items-start gap-2 text-row-title">
+                <CakeIcon aria-hidden className="mt-0.5 size-4.5 shrink-0 text-primary" />
+                <span>{formatBirthdayLine(birthday, ageOn(birthday, moscowToday()))}</span>
+              </p>
+            )}
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
               <ContactFrequencyPicker contactId={contact.id} frequency={contact.contactFrequency} />
               {/* Without a frequency there is no period to start again */}
@@ -93,6 +112,7 @@ async function ContactDetails({ params }: Pick<PageProps<"/contacts/[id]">, "par
                 phone: contact.phone,
                 email: contact.email,
                 contactFrequency: contact.contactFrequency,
+                birthday,
               }}
               groups={allGroups}
               contactGroups={contactGroups}

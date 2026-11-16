@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Restores the prod database from a backup file (made by deploy.sh or by this
+# Restores the prod database from a backup file (made by backup.sh, deploy.sh or this
 # script). Run it by hand on the server, in a terminal, as the user deploy:
 #
 #   sudo -u deploy bash /opt/personal-crm/restore.sh /opt/personal-crm/backups/<file>.dump

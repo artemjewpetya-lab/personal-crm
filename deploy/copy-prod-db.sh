@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Makes the database of the test stand (staging) a fresh copy of prod: loads the
-# newest prod backup into it. Run it on the server as the user deploy, when the
-# test stand is set up and whenever its data got spoiled:
+# newest prod backup of any kind (daily or before a deploy) into it. Run it on the
+# server as the user deploy, when the test stand is set up and whenever its data
+# got spoiled:
 #
 #   sudo -u deploy bash /opt/personal-crm/copy-prod-db.sh [--yes]
 #
@@ -52,7 +53,7 @@ fi
 # shellcheck disable=SC2012
 file="$(ls -1t "$BACKUP_DIR"/*.dump 2>/dev/null | head -n 1 || true)"
 if [[ -z "$file" ]]; then
-  echo "No prod backups in $BACKUP_DIR: deploy prod first. Nothing was changed." >&2
+  echo "No prod backups in $BACKUP_DIR. Nothing was changed." >&2
   exit 1
 fi
 

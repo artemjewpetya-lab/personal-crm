@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# Shared by deploy.sh, restore.sh and copy-prod-db.sh (sourced, not run): the
+# Shared by deploy.sh, backup.sh, restore.sh and copy-prod-db.sh (sourced, not run): the
 # environments, paths, the docker compose wrapper, the lock, database backups and
 # the /health smoke test.
 # The caller sets `set -euo pipefail`, calls use_env <prod|staging> and exports
@@ -8,7 +8,8 @@
 # This folder: the scripts and compose.yaml, shared by both environments.
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly APP_DIR
-# Backups of the prod database. Only prod is backed up; the test stand is
+# Backups of the prod database: daily_ (backup.sh), deploy_ (deploy.sh, before each
+# deploy), before-restore_ (restore.sh). Only prod is backed up; the test stand is
 # loaded from these (copy-prod-db.sh).
 readonly BACKUP_DIR="$APP_DIR/backups"
 # shellcheck disable=SC2034 # used by deploy.sh

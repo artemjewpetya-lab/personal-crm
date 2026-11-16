@@ -1,0 +1,13 @@
+# Runs personal-crm-backup.service every day at 03:00 Moscow time. If the server was
+# off at that time, the backup runs as soon as it is on again (Persistent).
+# A root-owned copy goes to /etc/systemd/system. How to install it: README,
+# "Бэкапы и восстановление".
+[Unit]
+Description=Personal CRM: daily backup of the prod database at 03:00 Moscow time
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 Europe/Moscow
+Persistent=true
+
+[Install]
+WantedBy=timers.target

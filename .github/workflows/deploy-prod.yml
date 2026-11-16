@@ -1,0 +1,79 @@
+# Deploy to prod, by hand only: GitHub -> Actions -> Deploy prod -> Run workflow.
+# Goes to prod only a version whose deploy to the test stand succeeded; a rollback
+# goes to the prod version before the current one, which the server remembers.
+#   prod: database backup -> migrations -> new version -> smoke /health
+# After a successful deploy: old images are removed from GHCR (on the server,
+# deploy.sh removes them itself).
+# The logic lives in deploy/ (ci-prod-deploy.sh, ci-prune-ghcr.sh); this file only
+# calls it. The form below is what the person running it sees, so it is in Russian.
+name: Deploy prod
+run-name: ${{ inputs.rollback && 'Deploy prod — откат' || 'Deploy prod' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: >-
+          SHA коммита. Оставьте пустым — выкатится последняя версия, которая удачно
+          выкатилась на тест-стенд
+        type: string
+        required: false
+        default: ""
+      rollback:
+        description: >-
+          Откат: вернуть версию прода, которая работала до текущей (поле SHA при
+          откате не учитывается)
+        type: boolean
+        default: false
+
+# Never two deploys to prod at once (the server also has a lock).
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to prod
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # No GitHub environment here: GitHub would record the commit of main as the one
+    # deployed, not the one that really went to prod. Which one did: the run summary
+    # and https://app.personalcrm.site/health.
+    permissions:
+      contents: read
+      deployments: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Run deploy/ci-prod-deploy.sh
+        run: bash deploy/ci-prod-deploy.sh
+        env:
+          ROLLBACK: ${{ inputs.rollback }}
+          INPUT_SHA: ${{ inputs.sha }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  prune-ghcr:
+    name: Prune GHCR
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Run deploy/ci-prune-ghcr.sh
+        run: bash deploy/ci-prune-ghcr.sh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
